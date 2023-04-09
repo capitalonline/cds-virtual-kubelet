@@ -39,8 +39,15 @@ func init() {
 	}
 
 	dnsDeal()
-	_, _ = Run("sh", "-c", "echo '101.251.217.74  cdsapi-gateway.gic.pre' >> /etc/hosts")
-	_, _ = Run("sh", "-c", "echo '10.2.10.101  openapi.gic.test' >> /etc/hosts")
+	if preIp := os.Getenv("PRE_IP"); preIp != "" {
+		_, _ = Run("sh", "-c", fmt.Sprintf("echo '%s  cdsapi-gateway.gic.pre' >> /etc/hosts", preIp))
+	}
+
+	if devIp := os.Getenv("DEV_IP"); devIp != "" {
+		_, _ = Run("sh", "-c", fmt.Sprintf("echo '%s  openapi.gic.test' >> /etc/hosts", devIp))
+	}
+
+	dnsDeal()
 
 	APIHost = os.Getenv("OPENAPI_HOST")
 
