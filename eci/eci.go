@@ -137,7 +137,7 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		log.G(ctx).WithField("Action", CreateContainerGroupAction).Error(err)
 		return err
 	}
-	code, msg, err := cdsapi.CdsRespDeal(ctx, response, nil)
+	code, msg, err := cdsapi.CdsRespDeal(ctx, response, CreateContainerGroupAction, nil)
 	log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("create pod resp stat: %v, %v", code, msg))
 	if err != nil {
 		log.G(ctx).WithField("Func", "CreatePod").Error(err)
@@ -319,7 +319,7 @@ func (p *ECIProvider) GetCgs(ctx context.Context, namespace, name string) []Cont
 		log.G(ctx).WithField("Func", "GetCgs").Error(err)
 		return nil
 	}
-	_, _, err = cdsapi.CdsRespDeal(ctx, response, &cgs)
+	_, _, err = cdsapi.CdsRespDeal(ctx, response, DescribeContainerGroups, &cgs)
 	if err != nil {
 		log.G(ctx).WithField("Func", "GetCgs").Error(err)
 		return nil

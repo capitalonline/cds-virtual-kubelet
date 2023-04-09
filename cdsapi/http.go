@@ -62,7 +62,7 @@ func DoOpenApiRequest(ctx context.Context, req *CloudRequest, staggered int) (re
 	for i := 0; i < 3; i++ {
 		reqUrl := getUrl(req)
 		b, _ := json.Marshal(req.body)
-		log.G(ctx).WithField("Action", req.action).Debug(string(b))
+		log.G(ctx).WithField("Action", req.action).Debug(fmt.Sprintf("code: %v, content: %v", resp.StatusCode, string(b)))
 		resp, err = DoRequest(req.method, reqUrl, bytes.NewReader(b))
 		if err != nil || resp.StatusCode >= 500 {
 			log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("post %s 50x", req.action))
@@ -140,12 +140,12 @@ type Response struct {
 	Data     interface{} `json:"Data"`
 }
 
-func CdsRespDeal(ctx context.Context, response *http.Response, data interface{}) (string, string, error) {
+func CdsRespDeal(ctx context.Context, response *http.Response, action string, data interface{}) (string, string, error) {
 	content, err := io.ReadAll(response.Body)
 	if err != nil {
 		return "", error.Error(err), err
 	}
-	log.G(ctx).WithField("Func", "CdsResp").Debug(string(content))
+	log.G(ctx).WithField("Action", action).Debug(string(content))
 	if response.StatusCode >= 400 {
 		return "", "", fmt.Errorf("response code: %v", response.StatusCode)
 	}
