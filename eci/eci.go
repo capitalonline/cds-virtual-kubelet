@@ -83,7 +83,7 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		ownerMap["kind"] = pod.OwnerReferences[0].Kind
 		ownerMap["name"] = pod.OwnerReferences[0].Name
 	}
-	log.G(ctx).WithField("CDS", "cds-debug").Debug("create pod：",
+	log.G(ctx).WithField("CDS", "cds-debug").Debug("create pod: ",
 		pod.Namespace, pod.Name, pod.Status.Phase, pod.Status.Reason, pod.Status.Message)
 
 	request := CreateContainerGroup{}

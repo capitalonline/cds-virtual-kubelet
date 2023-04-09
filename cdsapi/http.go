@@ -31,10 +31,10 @@ func NewCCKRequest(ctx context.Context, action, method string, params map[string
 	if params == nil {
 		params = make(map[string]string)
 	}
-	if customerId := os.Getenv("DEV_CUSTOMER_Id"); customerId != "" {
+	if customerId := os.Getenv("CUSTOMER_ID"); customerId != "" {
 		params["CustomerId"] = customerId
 	}
-	if userId := os.Getenv("USER_Id"); userId != "" {
+	if userId := os.Getenv("USER_ID"); userId != "" {
 		params["UserId"] = userId
 	}
 	return NewRequest(action, method, params, cckProductType, body), nil
