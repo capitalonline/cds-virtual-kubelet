@@ -65,6 +65,7 @@ func DoOpenApiRequest(ctx context.Context, req *CloudRequest, staggered int) (re
 		log.G(ctx).WithField("Action", req.action).Debug(string(b))
 		resp, err = DoRequest(req.method, reqUrl, bytes.NewReader(b))
 		if err != nil || resp.StatusCode >= 500 {
+			log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("post %s 50x", req.action))
 			time.Sleep(10 * time.Second)
 			continue
 		} else {

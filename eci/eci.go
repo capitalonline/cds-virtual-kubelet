@@ -83,8 +83,8 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		ownerMap["kind"] = pod.OwnerReferences[0].Kind
 		ownerMap["name"] = pod.OwnerReferences[0].Name
 	}
-	log.G(ctx).WithField("CDS", "cds-debug").Debug("create pod: ",
-		pod.Namespace, pod.Name, pod.Status.Phase, pod.Status.Reason, pod.Status.Message)
+	log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("create pod: %v, %v, %v, %v, %v",
+		pod.Namespace, pod.Name, pod.Status.Phase, pod.Status.Reason, pod.Status.Message))
 
 	request := CreateContainerGroup{}
 	request.RestartPolicy = string(pod.Spec.RestartPolicy)
@@ -138,7 +138,7 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		return err
 	}
 	code, msg, err := cdsapi.CdsRespDeal(ctx, response, nil)
-	log.G(ctx).WithField("CDS", "cds-debug").Debug("create pod resp stat: ", code, msg)
+	log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("create pod resp stat: %v, %v", code, msg))
 	if err != nil {
 		log.G(ctx).WithField("Func", "CreatePod").Error(err)
 		return err
@@ -152,7 +152,7 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 
 // UpdatePod Update Annotations
 func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
-	log.G(ctx).WithField("CDS", "cds-debug").Debug("update pod: ", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason)
+	log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("update pod: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
@@ -188,7 +188,7 @@ func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	eciId := ""
 	cgs := p.GetCgs(ctx, pod.Namespace, pod.Name)
-	log.G(ctx).WithField("CDS", "cds-debug").Debug("delete pod: ", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason)
+	log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("delete pod: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
 	if len(cgs) == 1 {
 		eciId = cgs[0].ContainerGroupId
 	} else if len(cgs) > 1 {
@@ -199,7 +199,7 @@ func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 		}
 	}
 	if eciId == "" {
-		log.G(ctx).WithField("CDS", "cds-debug").Debug("delete pod fail: ", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason)
+		log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("delete pod fail: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
 		return errdefs.NotFoundf(" can't find Pod %s", pod.Name)
 	}
 
@@ -228,7 +228,7 @@ func (p *ECIProvider) GetPod(ctx context.Context, namespace, name string) (*v1.P
 	if strings.Contains(name, "oss-csi-cds-node") {
 		return nil, nil
 	}
-	log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod: ", name, namespace)
+	log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod: ", name+" "+namespace)
 	pod, err := p.GetPodByCondition(ctx, namespace, name)
 	if err != nil {
 		log.G(context.TODO()).WithField("Func", "GetPod").Error(err)
@@ -294,7 +294,7 @@ func (p *ECIProvider) GetPodByCondition(ctx context.Context, namespace, name str
 		cg := cgs[0]
 		return containerGroupToPod(&cg)
 	} else if len(cgs) > 1 {
-		log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod by condition warn: non-uniqueness", name, namespace)
+		log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod by condition warn: non-uniqueness: ", name+" "+namespace)
 		return nil, nil
 	} else {
 		return nil, nil
