@@ -152,7 +152,8 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 
 // UpdatePod Update Annotations
 func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
-	log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("update pod: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
+	log.G(ctx).WithField("CDS", "cds-debug").Debug(
+		fmt.Sprintf("update pod: %v, %v, %v, %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
@@ -160,7 +161,7 @@ func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 	pod.Annotations["virtual-node-id"] = NodeId
 	pod.Annotations["eci-private_id"] = PrivateId
 	if pod.Annotations["eci-instance-id"] == "" {
-		cgs := p.GetCgs(ctx, pod.Namespace, pod.Name)
+		cgs, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
 		eciId := ""
 		cpu := ""
 		mem := ""
@@ -187,7 +188,7 @@ func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 // DeletePod deletes the specified pod out of ECI.
 func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	eciId := ""
-	cgs := p.GetCgs(ctx, pod.Namespace, pod.Name)
+	cgs, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
 	log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("delete pod: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
 	if len(cgs) == 1 {
 		eciId = cgs[0].ContainerGroupId
@@ -228,10 +229,10 @@ func (p *ECIProvider) GetPod(ctx context.Context, namespace, name string) (*v1.P
 	if strings.Contains(name, "oss-csi-cds-node") {
 		return nil, nil
 	}
-	log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod: ", name+" "+namespace)
+	log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod: ", name+", "+namespace)
 	pod, err := p.GetPodByCondition(ctx, namespace, name)
 	if err != nil {
-		log.G(context.TODO()).WithField("Func", "GetPod").Error(err)
+		log.G(ctx).WithField("CDS", "cds-debug").Error("get pod err: ", err)
 		return nil, err
 	}
 	return pod, nil
@@ -241,7 +242,7 @@ func (p *ECIProvider) GetPod(ctx context.Context, namespace, name string) (*v1.P
 func (p *ECIProvider) GetContainerLogs(ctx context.Context, namespace, podName, containerName string, opts api.ContainerLogOpts) (io.ReadCloser, error) {
 	logContent := "todo "
 	eciId := ""
-	cgs := p.GetCgs(ctx, namespace, podName)
+	cgs, _ := p.GetCgs(ctx, namespace, podName)
 	if len(cgs) == 1 {
 		eciId = cgs[0].ContainerGroupId
 	}
@@ -274,7 +275,11 @@ func (p *ECIProvider) GetPodStatus(ctx context.Context, namespace, name string) 
 // GetPods returns a list of all pods known to be running within ECI.
 func (p *ECIProvider) GetPods(ctx context.Context) ([]*v1.Pod, error) {
 	pods := make([]*v1.Pod, 0)
-	for _, cg := range p.GetCgs(ctx, "", "") {
+	cgs, err := p.GetCgs(ctx, "", "")
+	if err != nil {
+		return nil, err
+	}
+	for _, cg := range cgs {
 		c := cg
 		pod, err := containerGroupToPod(&c)
 		if err != nil {
@@ -289,7 +294,10 @@ func (p *ECIProvider) GetPods(ctx context.Context) ([]*v1.Pod, error) {
 
 func (p *ECIProvider) GetPodByCondition(ctx context.Context, namespace, name string) (*v1.Pod, error) {
 	// 根据 nodeId+ns+podName 精确查询
-	cgs := p.GetCgs(ctx, namespace, name)
+	cgs, err := p.GetCgs(ctx, namespace, name)
+	if err != nil {
+		return nil, err
+	}
 	if len(cgs) == 1 {
 		cg := cgs[0]
 		return containerGroupToPod(&cg)
@@ -301,7 +309,7 @@ func (p *ECIProvider) GetPodByCondition(ctx context.Context, namespace, name str
 	}
 }
 
-func (p *ECIProvider) GetCgs(ctx context.Context, namespace, name string) []ContainerGroup {
+func (p *ECIProvider) GetCgs(ctx context.Context, namespace, name string) ([]ContainerGroup, error) {
 	var cname string
 	if namespace != "" && name != "" {
 		cname = fmt.Sprintf("%s-%s", namespace, name)
@@ -317,14 +325,14 @@ func (p *ECIProvider) GetCgs(ctx context.Context, namespace, name string) []Cont
 	response, err := cdsapi.DoOpenApiRequest(ctx, cckRequest, 3000)
 	if err != nil {
 		log.G(ctx).WithField("Func", "GetCgs").Error(err)
-		return nil
+		return nil, err
 	}
 	_, _, err = cdsapi.CdsRespDeal(ctx, response, DescribeContainerGroups, &cgs)
 	if err != nil {
 		log.G(ctx).WithField("Func", "GetCgs").Error(err)
-		return nil
+		return nil, err
 	}
-	return cgs.Eci
+	return cgs.Eci, nil
 }
 
 // Capacity returns a resource list containing the capacity limits set for ECI.
