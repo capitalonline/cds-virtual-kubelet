@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -27,9 +28,15 @@ type CloudRequest struct {
 }
 
 func NewCCKRequest(ctx context.Context, action, method string, params map[string]string, body interface{}) (*CloudRequest, error) {
-	params = make(map[string]string)
-	params["CustomerId"] = "E020912"
-	params["UserId"] = "18633337777"
+	if params == nil {
+		params = make(map[string]string)
+	}
+	if customerId := os.Getenv("DEV_CUSTOMER_Id"); customerId != "" {
+		params["CustomerId"] = customerId
+	}
+	if userId := os.Getenv("USER_Id"); userId != "" {
+		params["UserId"] = userId
+	}
 	return NewRequest(action, method, params, cckProductType, body), nil
 }
 
