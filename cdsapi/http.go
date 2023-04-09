@@ -62,13 +62,17 @@ func DoOpenApiRequest(ctx context.Context, req *CloudRequest, staggered int) (re
 	for i := 0; i < 3; i++ {
 		reqUrl := getUrl(req)
 		b, _ := json.Marshal(req.body)
-		log.G(ctx).WithField("Action", req.action).Debug(fmt.Sprintf("code: %v, content: %v", resp.StatusCode, string(b)))
 		resp, err = DoRequest(req.method, reqUrl, bytes.NewReader(b))
-		if err != nil || resp.StatusCode >= 500 {
-			log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("post %s 50x", req.action))
+		if err != nil {
+			log.G(ctx).WithField("Action", req.action).Error(err)
+			time.Sleep(10 * time.Second)
+			continue
+		} else if resp.StatusCode >= 500 {
+			log.G(ctx).WithField("Action", req.action).Error(fmt.Sprintf("code: %v, content: %v", resp.StatusCode, string(b)))
 			time.Sleep(10 * time.Second)
 			continue
 		} else {
+			log.G(ctx).WithField("Action", req.action).Debug(fmt.Sprintf("code: %v, content: %v", resp.StatusCode, string(b)))
 			break
 		}
 	}
