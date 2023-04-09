@@ -83,7 +83,7 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		ownerMap["kind"] = pod.OwnerReferences[0].Kind
 		ownerMap["name"] = pod.OwnerReferences[0].Name
 	}
-	log.G(ctx).WithField("CDS", "cds-debug").Debugf("create pod: %s %s, pod stat：%v, %s, %s",
+	log.G(ctx).WithField("CDS", "cds-debug").Debug("create pod：",
 		pod.Namespace, pod.Name, pod.Status.Phase, pod.Status.Reason, pod.Status.Message)
 
 	request := CreateContainerGroup{}
@@ -138,7 +138,7 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		return err
 	}
 	code, msg, err := cdsapi.CdsRespDeal(ctx, response, nil)
-	log.G(ctx).WithField("CDS", "cds-debug").Debugf("create pod resp stat: %s %s", code, msg)
+	log.G(ctx).WithField("CDS", "cds-debug").Debug("create pod resp stat: ", code, msg)
 	if err != nil {
 		log.G(ctx).WithField("Func", "CreatePod").Error(err)
 		return err
@@ -836,30 +836,18 @@ func (p *ECIProvider) getVolumes(pod *v1.Pod) ([]Volume, error) {
 	return volumes, nil
 }
 
-func makeInstanceType(pod *v1.Pod) (cpu, mem float64) {
-	// t = pod.Annotations["eci-instance-type"]
-	c := pod.Annotations["eci-instance-cpu"]
-	m := pod.Annotations["eci-instance-mem"]
-	if c == "" || m == "" {
-		return 2, 4
-	}
-	cpu, _ = strconv.ParseFloat(c, 64)
-	mem, _ = strconv.ParseFloat(m, 64)
-	if cpu == 0 || mem == 0 {
-		return 2, 4
-	}
-	return cpu, mem
-}
-
 func makeStorageType(pod *v1.Pod) (t string, size int) {
 	t = pod.Annotations["eci-storage-type"]
 	s := pod.Annotations["eci-storage-size"]
-	if t == "" || s == "" {
-		return "high_disk", 20
+	if t == "" {
+		t = "high_disk"
+	}
+	if s == "" {
+		s = "20"
 	}
 	size, _ = strconv.Atoi(s)
 	if size == 0 {
-		return "high_disk", 20
+		size = 20
 	}
 	return t, size
 }
