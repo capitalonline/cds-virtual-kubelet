@@ -272,7 +272,7 @@ func (p *ECIProvider) GetPodStatus(ctx context.Context, namespace, name string) 
 		return nil, err
 	}
 	if pod == nil {
-		return nil, nil
+		return nil, fmt.Errorf("pod is nil")
 	}
 	return &pod.Status, nil
 }
