@@ -154,38 +154,45 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 	log.G(ctx).WithField("CDS", "cds-debug").Debug(
 		fmt.Sprintf("update pod: %v, %v, %v, %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
-	if pod.Annotations != nil {
-		if pod.Annotations["eci-task-state"] == "error" {
-			return fmt.Errorf("%v", "task error")
-		}
-	} else {
+	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
 	pod.Annotations["cluster-id"] = ClusterId
 	pod.Annotations["virtual-node-id"] = NodeId
 	pod.Annotations["eci-private-id"] = PrivateId
-	if pod.Annotations["eci-instance-id"] == "" {
-		cgs, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
-		eciId := ""
-		cpu := ""
-		mem := ""
-		if len(cgs) == 1 {
-			eciId = cgs[0].ContainerGroupId
-			cpu = fmt.Sprintf("%.1f", cgs[0].Cpu)
-			mem = fmt.Sprintf("%.1f", cgs[0].Memory)
-		} else if len(cgs) > 1 {
-			for _, v := range cgs {
-				if v.ContainerGroupName == fmt.Sprintf("%v-%v", pod.Namespace, pod.Name) {
-					eciId = v.ContainerGroupId
-					cpu = fmt.Sprintf("%.1f", v.Cpu)
-					mem = fmt.Sprintf("%.1f", v.Memory)
-				}
-			}
-		}
-		pod.Annotations["eci-instance-id"] = eciId
-		pod.Annotations["eci-instance-cpu"] = cpu
-		pod.Annotations["eci-instance-mem"] = mem
+
+	eciId := ctx.Value("eci-id")
+	cpu := ctx.Value("eci-instance-cpu")
+	mem := ctx.Value("eci-instance-mem")
+	taskId := ctx.Value("eci-task-id")
+	taskStat := ctx.Value("eci-task-state")
+	if fmt.Sprintf("%v", taskStat) == "error" {
+		return fmt.Errorf("%v", taskStat)
 	}
+
+	//if pod.Annotations["eci-instance-id"] == "" {
+	//	cgs, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
+	//
+	//	if len(cgs) == 1 {
+	//		eciId = cgs[0].ContainerGroupId
+	//		cpu = fmt.Sprintf("%.1f", cgs[0].Cpu)
+	//		mem = fmt.Sprintf("%.1f", cgs[0].Memory)
+	//	} else if len(cgs) > 1 {
+	//		for _, v := range cgs {
+	//			if v.ContainerGroupName == fmt.Sprintf("%v-%v", pod.Namespace, pod.Name) {
+	//				eciId = v.ContainerGroupId
+	//				cpu = fmt.Sprintf("%.1f", v.Cpu)
+	//				mem = fmt.Sprintf("%.1f", v.Memory)
+	//			}
+	//		}
+	//	}
+	//
+	//}
+	pod.Annotations["eci-instance-id"] = fmt.Sprintf("%v", eciId)
+	pod.Annotations["eci-instance-cpu"] = fmt.Sprintf("%v", cpu)
+	pod.Annotations["eci-instance-mem"] = fmt.Sprintf("%v", mem)
+	pod.Annotations["eci-task-id"] = fmt.Sprintf("%v", taskId)
+	pod.Annotations["eci-task-state"] = fmt.Sprintf("%v", taskStat)
 	return nil
 }
 
@@ -310,6 +317,12 @@ func (p *ECIProvider) GetPodByCondition(ctx context.Context, namespace, name str
 	}
 	if len(cgs) == 1 {
 		cg := cgs[0]
+		ctx = context.WithValue(ctx, "eci-id", cg.ContainerGroupId)
+		ctx = context.WithValue(ctx, "eci-task-id", cg.TaskId)
+		ctx = context.WithValue(ctx, "eci-task-state", cg.TaskState)
+		ctx = context.WithValue(ctx, "eci-instance-cpu", cg.TaskId)
+		ctx = context.WithValue(ctx, "eci-instance-mem", cg.TaskState)
+
 		return containerGroupToPod(&cg)
 	} else if len(cgs) > 1 {
 		log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod is non-uniqueness: ", name+" "+namespace)
@@ -675,11 +688,7 @@ func containerGroupToPod(cg *ContainerGroup) (*v1.Pod, error) {
 			ContainerStatuses: containerStatuses,
 		},
 	}
-	if pod.Annotations == nil {
-		pod.Annotations = make(map[string]string)
-	}
-	pod.Annotations["eci-task-id"] = cg.TaskId
-	pod.Annotations["eci-task-state"] = cg.TaskState
+
 	return &pod, nil
 }
 
