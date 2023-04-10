@@ -7,6 +7,8 @@ type ContainerGroupResp struct {
 type ContainerGroup struct {
 	ContainerGroupId   string          `json:"container_group_id"`
 	ContainerGroupName string          `json:"container_group_name"`
+	TaskId             string          `json:"task_id"`
+	TaskState          string          `json:"task_state"`
 	PodName            string          `json:"pod_name"`
 	Namespace          string          `json:"namespace"`
 	SiteId             string          `json:"site_id"`

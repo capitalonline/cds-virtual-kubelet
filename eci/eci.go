@@ -154,12 +154,16 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 	log.G(ctx).WithField("CDS", "cds-debug").Debug(
 		fmt.Sprintf("update pod: %v, %v, %v, %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
-	if pod.Annotations == nil {
+	if pod.Annotations != nil {
+		if pod.Annotations["eci-task-state"] == "error" {
+			return fmt.Errorf("%v", "task error")
+		}
+	} else {
 		pod.Annotations = make(map[string]string)
 	}
 	pod.Annotations["cluster-id"] = ClusterId
 	pod.Annotations["virtual-node-id"] = NodeId
-	pod.Annotations["eci-private_id"] = PrivateId
+	pod.Annotations["eci-private-id"] = PrivateId
 	if pod.Annotations["eci-instance-id"] == "" {
 		cgs, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
 		eciId := ""
@@ -663,7 +667,7 @@ func containerGroupToPod(cg *ContainerGroup) (*v1.Pod, error) {
 		Status: v1.PodStatus{
 			Phase:             eciStateToPodPhase(eciState),
 			Conditions:        eciStateToPodConditions(eciState, podCreationTimestamp),
-			Message:           "",
+			Message:           cg.TaskState,
 			Reason:            "",
 			HostIP:            cg.IntranetIp,
 			PodIP:             cg.IntranetIp,
@@ -671,6 +675,11 @@ func containerGroupToPod(cg *ContainerGroup) (*v1.Pod, error) {
 			ContainerStatuses: containerStatuses,
 		},
 	}
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
+	pod.Annotations["eci-task-id"] = cg.TaskId
+	pod.Annotations["eci-task-state"] = cg.TaskState
 	return &pod, nil
 }
 
