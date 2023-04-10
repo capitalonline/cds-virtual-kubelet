@@ -151,7 +151,7 @@ func CdsRespDeal(ctx context.Context, response *http.Response, action string, da
 	}
 	log.G(ctx).WithField("Action", action).Debug(string(content))
 	if response.StatusCode >= 400 {
-		return "", "", fmt.Errorf("response code: %v", response.StatusCode)
+		return "", "", fmt.Errorf("[%v]: %v", response.StatusCode, string(content))
 	}
 	var res Response
 	err = json.Unmarshal(content, &res)
