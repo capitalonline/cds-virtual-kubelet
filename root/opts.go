@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/capitalonline/cds-virtual-kubelet/eci"
 	"os"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -16,7 +17,7 @@ const (
 	DefaultInformerResyncPeriod = 1 * time.Minute
 	DefaultMetricsAddr          = ":10255"
 	DefaultListenPort           = 10250
-	DefaultPodSyncWorkers       = 5
+	DefaultPodSyncWorkers       = 100
 	DefaultKubeNamespace        = corev1.NamespaceAll
 
 	DefaultTaintEffect = string(corev1.TaintEffectNoSchedule)
@@ -93,6 +94,14 @@ func SetDefaultOpts(c *Opts) error {
 	c.ListenPort = DefaultListenPort
 
 	c.PodSyncWorkers = DefaultPodSyncWorkers
+	i := os.Getenv("WORKERS")
+	if i != "" {
+		workers, _ := strconv.Atoi(i)
+		if workers != 0 {
+			c.PodSyncWorkers = workers
+		}
+	}
+
 	c.KubeNamespace = DefaultKubeNamespace
 	vkTaintStr := os.Getenv("TAINTS")
 	if vkTaintStr == "" {
