@@ -188,14 +188,19 @@ func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 // DeletePod deletes the specified pod out of ECI.
 func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	eciId := ""
-	cgs, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
-	log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("delete pod: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
-	if len(cgs) == 1 {
-		eciId = cgs[0].ContainerGroupId
-	} else if len(cgs) > 1 {
-		for _, v := range cgs {
-			if v.ContainerGroupName == fmt.Sprintf("%v-%v", pod.Namespace, pod.Name) {
-				eciId = v.ContainerGroupId
+	if pod.Annotations != nil {
+		eciId = pod.Annotations["eci-instance-id"]
+	}
+	if eciId == "" {
+		cgs, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
+		log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("delete pod: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
+		if len(cgs) == 1 {
+			eciId = cgs[0].ContainerGroupId
+		} else if len(cgs) > 1 {
+			for _, v := range cgs {
+				if v.ContainerGroupName == fmt.Sprintf("%v-%v", pod.Namespace, pod.Name) {
+					eciId = v.ContainerGroupId
+				}
 			}
 		}
 	}
@@ -296,15 +301,17 @@ func (p *ECIProvider) GetPodByCondition(ctx context.Context, namespace, name str
 	// 根据 nodeId+ns+podName 精确查询
 	cgs, err := p.GetCgs(ctx, namespace, name)
 	if err != nil {
+		log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod is err: ", name+" "+namespace)
 		return nil, err
 	}
 	if len(cgs) == 1 {
 		cg := cgs[0]
 		return containerGroupToPod(&cg)
 	} else if len(cgs) > 1 {
-		log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod by condition warn: non-uniqueness: ", name+" "+namespace)
+		log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod is non-uniqueness: ", name+" "+namespace)
 		return nil, nil
 	} else {
+		log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod is null ", name+" "+namespace)
 		return nil, nil
 	}
 }
@@ -322,7 +329,7 @@ func (p *ECIProvider) GetCgs(ctx context.Context, namespace, name string) ([]Con
 		ContainerGroupName: cname,
 	}
 	cckRequest, _ := cdsapi.NewCCKRequest(ctx, DescribeContainerGroups, http.MethodPost, nil, request)
-	response, err := cdsapi.DoOpenApiRequest(ctx, cckRequest, 3000)
+	response, err := cdsapi.DoOpenApiRequest(ctx, cckRequest, 0)
 	if err != nil {
 		log.G(ctx).WithField("Func", "GetCgs").Error(err)
 		return nil, err
