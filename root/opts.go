@@ -17,7 +17,7 @@ const (
 	DefaultInformerResyncPeriod = 1 * time.Minute
 	DefaultMetricsAddr          = ":10255"
 	DefaultListenPort           = 10250
-	DefaultPodSyncWorkers       = 100
+	DefaultPodSyncWorkers       = 200
 	DefaultKubeNamespace        = corev1.NamespaceAll
 
 	DefaultTaintEffect = string(corev1.TaintEffectNoSchedule)
