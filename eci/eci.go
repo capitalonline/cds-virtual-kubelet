@@ -1,10 +1,7 @@
 package eci
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"github.com/capitalonline/cds-virtual-kubelet/cdsapi"
 	"github.com/virtual-kubelet/virtual-kubelet/errdefs"
@@ -13,21 +10,17 @@ import (
 	"github.com/virtual-kubelet/virtual-kubelet/node/api"
 	"io"
 	v1 "k8s.io/api/core/v1"
-	k8serr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"net/http"
-	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-const podTagTimeFormat = "2006-01-02T15-04-05Z"
-const timeFormat = "2006-01-02T15:04:05Z"
-
 // ECIProvider implements the virtual-kubelet provider interface and communicates with Alibaba Cloud's ECI APIs.
 type ECIProvider struct {
+	sync.RWMutex
 	resourceManager    *manager.ResourceManager
 	nodeName           string
 	operatingSystem    string
@@ -36,6 +29,15 @@ type ECIProvider struct {
 	pods               string
 	internalIP         string
 	daemonEndpointPort int32
+	cache              map[string]PodCache
+}
+
+type PodCache struct {
+	PodName          string
+	Namespace        string
+	State            string
+	CreateTime       time.Time
+	SimpleContainers []map[string]string
 }
 
 // AuthConfig is the secret returned from an ImageRegistryCredential
@@ -64,12 +66,14 @@ func NewECIProvider(rm *manager.ResourceManager, nodeName, operatingSystem strin
 	p.nodeName = nodeName
 	p.internalIP = internalIP
 	p.daemonEndpointPort = daemonEndpointPort
+
+	p.cache = make(map[string]PodCache)
+
 	return &p, err
 }
 
 // CreatePod accepts a Pod definition and creates an ECI deployment
 func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
-	// 忽略 daemonSet Pod
 	if pod != nil && pod.OwnerReferences != nil && len(pod.OwnerReferences) != 0 && pod.OwnerReferences[0].Kind == "DaemonSet" {
 		return fmt.Errorf("%s DaemonSet unsupported", pod.Name)
 	}
@@ -78,12 +82,13 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	}
 	var (
 		ownerMap = make(map[string]string)
+		// simContainers []map[string]string
 	)
 	if pod != nil && pod.OwnerReferences != nil && len(pod.OwnerReferences) != 0 {
 		ownerMap["kind"] = pod.OwnerReferences[0].Kind
 		ownerMap["name"] = pod.OwnerReferences[0].Name
 	}
-	log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("create pod: %v, %v, %v, %v, %v",
+	log.G(ctx).WithField("CDS", "CreatePod").Debug(fmt.Sprintf("create pod: %v, %v, %v, %v, %v",
 		pod.Namespace, pod.Name, pod.Status.Phase, pod.Status.Reason, pod.Status.Message))
 
 	request := CreateContainerGroup{}
@@ -94,7 +99,15 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	if err != nil {
 		return err
 	}
-	initContainers, _, _, err := p.getContainers(pod, true)
+	//for _, con := range containers {
+	//	simContainers = append(simContainers, map[string]string{
+	//		"name":  con.Name,
+	//		"image": con.Image,
+	//		"cpu":   fmt.Sprintf("%.2f", cpu),
+	//		"mem":   fmt.Sprintf("%.1fG", mem),
+	//	})
+	//}
+	initContainers, icpu, imem, err := p.getContainers(pod, true)
 	if err != nil {
 		return err
 	}
@@ -128,7 +141,7 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	request.PodName = pod.Name
 	request.CreationTimestamp = pod.CreationTimestamp.UTC().Format(podTagTimeFormat)
 
-	request.Cpu, request.Memory = cpu, mem
+	request.Cpu, request.Memory = cpu+icpu, mem+imem
 	request.StorageType, request.StorageSize = makeStorageType(pod)
 
 	cckRequest, _ := cdsapi.NewCCKRequest(ctx, CreateContainerGroupAction, http.MethodPost, nil, request)
@@ -137,24 +150,33 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		log.G(ctx).WithField("Action", CreateContainerGroupAction).Error(err)
 		return err
 	}
-	code, msg, err := cdsapi.CdsRespDeal(ctx, response, CreateContainerGroupAction, nil)
-	log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("create pod resp stat: %v, %v", code, msg))
+	code, err := cdsapi.CdsRespDeal(ctx, response, CreateContainerGroupAction, nil)
 	if err != nil {
-		log.G(ctx).WithField("Func", "CreatePod").Error(err)
-		return err
-	} else if code == "CreateEciTaskError" {
-		return fmt.Errorf("%v", code)
-	} else if code == "MaxPodError" {
-		return fmt.Errorf("%v", code)
+		log.G(ctx).WithField("CDS", "CreatePod").Error(fmt.Sprintf("%s-%s: %v", pod.Namespace, pod.Name, err))
+		if code < 500 {
+			return err
+		}
 	}
+	//p.SetCache(ctx, request.ContainerGroupName, PodCache{
+	//	PodName:          pod.Name,
+	//	Namespace:        pod.Namespace,
+	//	State:            "create",
+	//	CreateTime:       pod.CreationTimestamp.UTC(),
+	//	SimpleContainers: simContainers,
+	//})
 	return nil
 }
 
 // UpdatePod Update Annotations
 func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
-	log.G(ctx).WithField("CDS", "cds-debug").Debug(
+	log.G(ctx).WithField("CDS", "UpdatePod").Debug(
 		fmt.Sprintf("update pod: %v, %v, %v, %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
+	//if pod.Status.Phase == v1.PodRunning {
+	//	p.UpdateCacheStat(ctx, fmt.Sprintf("%s-%s", pod.Namespace, pod.Name), "running")
+	//}
 	if pod.Status.Message == "error" {
+		// p.UpdateCacheStat(ctx, fmt.Sprintf("%s-%s", pod.Namespace, pod.Name), "error")
+		log.G(ctx).WithField("CDS", "UpdatePod").Error("cds pod task error")
 		return fmt.Errorf("%v", pod.Status.Message)
 	}
 	if pod.Annotations == nil {
@@ -164,24 +186,24 @@ func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 	pod.Annotations["virtual-node-id"] = NodeId
 	pod.Annotations["eci-private-id"] = PrivateId
 
-	if pod.Annotations["eci-instance-id"] == "" {
-		cgs, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
+	if pod.Annotations["eci-instance-id"] == "" || pod.Annotations["eci-task-id"] == "" {
+		cgs, _, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
 		eciId := ""
 		cpu := ""
 		mem := ""
 		taskId := ""
 		if len(cgs) == 1 {
 			eciId = cgs[0].ContainerGroupId
-			cpu = fmt.Sprintf("%.1f", cgs[0].Cpu)
-			mem = fmt.Sprintf("%.1f", cgs[0].Memory)
+			cpu = fmt.Sprintf("%.2f", cgs[0].Cpu)
+			mem = fmt.Sprintf("%.2f", cgs[0].Memory)
 			taskId = cgs[0].TaskId
 		} else if len(cgs) > 1 {
 			for _, v := range cgs {
 				if v.ContainerGroupName == fmt.Sprintf("%v-%v", pod.Namespace, pod.Name) {
 					eciId = v.ContainerGroupId
 					taskId = v.TaskId
-					cpu = fmt.Sprintf("%.1f", v.Cpu)
-					mem = fmt.Sprintf("%.1f", v.Memory)
+					cpu = fmt.Sprintf("%.2f", v.Cpu)
+					mem = fmt.Sprintf("%.2f", v.Memory)
 				}
 			}
 		}
@@ -196,11 +218,12 @@ func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 // DeletePod deletes the specified pod out of ECI.
 func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	eciId := ""
+	// p.DeleteCache(ctx, fmt.Sprintf("%s-%s", pod.Namespace, pod.Name))
 	if pod.Annotations != nil {
 		eciId = pod.Annotations["eci-instance-id"]
 	}
 	if eciId == "" {
-		cgs, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
+		cgs, _, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
 		log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("delete pod: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
 		if len(cgs) == 1 {
 			eciId = cgs[0].ContainerGroupId
@@ -242,10 +265,9 @@ func (p *ECIProvider) GetPod(ctx context.Context, namespace, name string) (*v1.P
 	if strings.Contains(name, "oss-csi-cds-node") {
 		return nil, nil
 	}
-	log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod: ", name+", "+namespace)
 	pod, err := p.GetPodByCondition(ctx, namespace, name)
 	if err != nil {
-		log.G(ctx).WithField("CDS", "cds-debug").Error("get pod err: ", err)
+		log.G(ctx).WithField("CDS", "GetPod").Error("get pod err: ", err)
 		return nil, err
 	}
 	return pod, nil
@@ -255,7 +277,7 @@ func (p *ECIProvider) GetPod(ctx context.Context, namespace, name string) (*v1.P
 func (p *ECIProvider) GetContainerLogs(ctx context.Context, namespace, podName, containerName string, opts api.ContainerLogOpts) (io.ReadCloser, error) {
 	logContent := "todo "
 	eciId := ""
-	cgs, _ := p.GetCgs(ctx, namespace, podName)
+	cgs, _, _ := p.GetCgs(ctx, namespace, podName)
 	if len(cgs) == 1 {
 		eciId = cgs[0].ContainerGroupId
 	}
@@ -277,9 +299,11 @@ func (p *ECIProvider) RunInContainer(ctx context.Context, namespace, podName, co
 func (p *ECIProvider) GetPodStatus(ctx context.Context, namespace, name string) (*v1.PodStatus, error) {
 	pod, err := p.GetPod(ctx, namespace, name)
 	if err != nil {
+		log.G(ctx).WithField("CDS", "GetPodStatus").Error(fmt.Sprintf("%s-%s status err: %s", namespace, name, err))
 		return nil, err
 	}
 	if pod == nil {
+		log.G(ctx).WithField("CDS", "GetPodStatus").Error(fmt.Sprintf("%s-%s status err: not found", namespace, name))
 		return nil, fmt.Errorf("pod is nil")
 	}
 	return &pod.Status, nil
@@ -288,7 +312,7 @@ func (p *ECIProvider) GetPodStatus(ctx context.Context, namespace, name string) 
 // GetPods returns a list of all pods known to be running within ECI.
 func (p *ECIProvider) GetPods(ctx context.Context) ([]*v1.Pod, error) {
 	pods := make([]*v1.Pod, 0)
-	cgs, err := p.GetCgs(ctx, "", "")
+	cgs, _, err := p.GetCgs(ctx, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -303,57 +327,6 @@ func (p *ECIProvider) GetPods(ctx context.Context) ([]*v1.Pod, error) {
 		pods = append(pods, pod)
 	}
 	return pods, nil
-}
-
-func (p *ECIProvider) GetPodByCondition(ctx context.Context, namespace, name string) (*v1.Pod, error) {
-	// 根据 nodeId+ns+podName 精确查询
-	cgs, err := p.GetCgs(ctx, namespace, name)
-	if err != nil {
-		log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod is err: ", name+" "+namespace)
-		return nil, err
-	}
-	if len(cgs) == 1 {
-		cg := cgs[0]
-		ctx = context.WithValue(ctx, "eci-id", cg.ContainerGroupId)
-		ctx = context.WithValue(ctx, "eci-task-id", cg.TaskId)
-		ctx = context.WithValue(ctx, "eci-task-state", cg.TaskState)
-		ctx = context.WithValue(ctx, "eci-instance-cpu", cg.TaskId)
-		ctx = context.WithValue(ctx, "eci-instance-mem", cg.TaskState)
-
-		return containerGroupToPod(&cg)
-	} else if len(cgs) > 1 {
-		log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod is non-uniqueness: ", name+" "+namespace)
-		return nil, nil
-	} else {
-		log.G(ctx).WithField("CDS", "cds-debug").Debug("get pod is null ", name+" "+namespace)
-		return nil, nil
-	}
-}
-
-func (p *ECIProvider) GetCgs(ctx context.Context, namespace, name string) ([]ContainerGroup, error) {
-	var cname string
-	if namespace != "" && name != "" {
-		cname = fmt.Sprintf("%s-%s", namespace, name)
-	}
-	cgs := ContainerGroupResp{}
-	request := DescribeContainerGroupsRequest{
-		SiteId:             SiteId,
-		NodeId:             NodeId,
-		Namespace:          namespace,
-		ContainerGroupName: cname,
-	}
-	cckRequest, _ := cdsapi.NewCCKRequest(ctx, DescribeContainerGroups, http.MethodPost, nil, request)
-	response, err := cdsapi.DoOpenApiRequest(ctx, cckRequest, 0)
-	if err != nil {
-		log.G(ctx).WithField("Func", "GetCgs").Error(err)
-		return nil, err
-	}
-	_, _, err = cdsapi.CdsRespDeal(ctx, response, DescribeContainerGroups, &cgs)
-	if err != nil {
-		log.G(ctx).WithField("Func", "GetCgs").Error(err)
-		return nil, err
-	}
-	return cgs.Eci, nil
 }
 
 // Capacity returns a resource list containing the capacity limits set for ECI.
@@ -436,448 +409,4 @@ func (p *ECIProvider) NodeDaemonEndpoints(ctx context.Context) *v1.NodeDaemonEnd
 // OperatingSystem returns the operating system that was provided by the config.
 func (p *ECIProvider) OperatingSystem() string {
 	return p.operatingSystem
-}
-
-func (p *ECIProvider) getContainers(pod *v1.Pod, init bool) ([]ContainerInfo, float64, float64, error) {
-	var (
-		allCpu float64
-		allMem float64
-	)
-	podContainers := pod.Spec.Containers
-	if init {
-		podContainers = pod.Spec.InitContainers
-	}
-	containers := make([]ContainerInfo, 0, len(podContainers))
-	for _, container := range podContainers {
-		imageList := strings.Split(container.Image, ":")
-		imageName := ""
-		imageVersion := ""
-		if len(imageList) > 1 {
-			imageName = imageList[0]
-			imageVersion = imageList[1]
-		} else {
-			imageName = container.Image
-
-		}
-		if imageVersion == "" {
-			imageVersion = "latest"
-		}
-		c := ContainerInfo{
-
-			Name:         container.Name,
-			Image:        imageName,
-			ImageVersion: imageVersion,
-			Command:      append(container.Command, container.Args...),
-			Ports:        make([]ContainerPort, 0, len(container.Ports)),
-		}
-
-		for _, port := range container.Ports {
-			c.Ports = append(c.Ports, ContainerPort{
-				Port:     int(port.ContainerPort),
-				Protocol: string(port.Protocol),
-			})
-		}
-
-		c.VolumeMounts = make([]VolumeMount, 0, len(container.VolumeMounts))
-		for _, v := range container.VolumeMounts {
-			c.VolumeMounts = append(c.VolumeMounts, VolumeMount{
-				Name:      v.Name,
-				MountPath: v.MountPath,
-				ReadOnly:  v.ReadOnly,
-			})
-		}
-
-		c.EnvironmentVars = make([]EnvironmentVar, 0, len(container.Env))
-		for _, e := range container.Env {
-			c.EnvironmentVars = append(c.EnvironmentVars, EnvironmentVar{Key: e.Name, Value: e.Value})
-		}
-
-		cpuRequest := 1.00
-		if _, ok := container.Resources.Limits[v1.ResourceCPU]; ok {
-			cpuRequest = float64(container.Resources.Limits.Cpu().MilliValue()) / 1000.00
-		}
-
-		c.Cpu = cpuRequest
-
-		memoryRequest := 2.0
-		if _, ok := container.Resources.Limits[v1.ResourceMemory]; ok {
-			memoryRequest = float64(container.Resources.Limits.Memory().Value()) / 1024.0 / 1024.0 / 1024.0
-		}
-
-		c.Memory = memoryRequest
-
-		c.ImagePullPolicy = string(container.ImagePullPolicy)
-		c.WorkingDir = container.WorkingDir
-		containers = append(containers, c)
-		allCpu += c.Cpu
-		allMem += c.Memory
-	}
-	return containers, allCpu, allMem, nil
-}
-
-func (p *ECIProvider) getImagePullSecrets(pod *v1.Pod) ([]ImageRegistryCredential, error) {
-	ips := make([]ImageRegistryCredential, 0, len(pod.Spec.ImagePullSecrets))
-	for _, ref := range pod.Spec.ImagePullSecrets {
-		secret, err := p.resourceManager.GetSecret(ref.Name, pod.Namespace)
-		if err != nil {
-			return ips, err
-		}
-		if secret == nil {
-			return nil, fmt.Errorf("error getting image pull secret")
-		}
-		switch secret.Type {
-		case v1.SecretTypeDockercfg:
-			ips, err = readDockerCfgSecret(secret, ips)
-		case v1.SecretTypeDockerConfigJson:
-			ips, err = readDockerConfigJSONSecret(secret, ips)
-		default:
-			return nil, fmt.Errorf("image pull secret type is not one of kubernetes.io/dockercfg or kubernetes.io/dockerconfigjson")
-		}
-
-		if err != nil {
-			return ips, err
-		}
-	}
-	return ips, nil
-}
-
-func readDockerCfgSecret(secret *v1.Secret, ips []ImageRegistryCredential) ([]ImageRegistryCredential, error) {
-	var err error
-	var authConfigs map[string]AuthConfig
-	repoData, ok := secret.Data[v1.DockerConfigKey]
-
-	if !ok {
-		return ips, fmt.Errorf("no dockercfg present in secret")
-	}
-
-	err = json.Unmarshal(repoData, &authConfigs)
-	if err != nil {
-		return ips, fmt.Errorf("failed to unmarshal auth config %+v", err)
-	}
-
-	for server, authConfig := range authConfigs {
-		ips = append(ips, ImageRegistryCredential{
-			Password: authConfig.Password,
-			Server:   server,
-			UserName: authConfig.Username,
-		})
-	}
-
-	return ips, err
-}
-
-func readDockerConfigJSONSecret(secret *v1.Secret, ips []ImageRegistryCredential) ([]ImageRegistryCredential, error) {
-	var err error
-	repoData, ok := secret.Data[v1.DockerConfigJsonKey]
-
-	if !ok {
-		return ips, fmt.Errorf("no dockerconfigjson present in secret")
-	}
-
-	var authConfigs map[string]map[string]AuthConfig
-
-	err = json.Unmarshal(repoData, &authConfigs)
-	if err != nil {
-		return ips, err
-	}
-
-	auths, ok := authConfigs["auths"]
-
-	if !ok {
-		return ips, fmt.Errorf("malformed dockerconfigjson in secret")
-	}
-
-	for server, authConfig := range auths {
-		ips = append(ips, ImageRegistryCredential{
-			Password: authConfig.Password,
-			Server:   server,
-			UserName: authConfig.Username,
-		})
-	}
-
-	return ips, err
-}
-
-func containerGroupToPod(cg *ContainerGroup) (*v1.Pod, error) {
-	if cg == nil {
-		return nil, nil
-	}
-	var podCreationTimestamp, containerStartTime metav1.Time
-	CreationTimestamp := cg.CreationTime
-	if CreationTimestamp != "" {
-		if t, err := time.Parse(podTagTimeFormat, CreationTimestamp); err == nil {
-			podCreationTimestamp = metav1.NewTime(t)
-		}
-	}
-	if len(cg.Containers) > 0 {
-		if cg.Containers[0].CurrentState != nil {
-			if t, err := time.Parse(timeFormat, cg.Containers[0].CurrentState.StartTime); err == nil {
-				containerStartTime = metav1.NewTime(t)
-			}
-		}
-	}
-
-	// Use the Provisioning State if it's not Succeeded,
-	// otherwise use the state of the instance.
-	eciState := cg.Status
-
-	containers := make([]v1.Container, 0, len(cg.Containers))
-	containerStatuses := make([]v1.ContainerStatus, 0, len(cg.Containers))
-	for _, c := range cg.Containers {
-		container := v1.Container{
-			Name:    c.Name,
-			Image:   c.Image,
-			Command: c.Command,
-			Resources: v1.ResourceRequirements{
-				Requests: v1.ResourceList{
-					v1.ResourceCPU:    resource.MustParse(fmt.Sprintf("%.2f", c.Cpu)),
-					v1.ResourceMemory: resource.MustParse(fmt.Sprintf("%.1fG", c.Memory)),
-				},
-			},
-		}
-
-		container.Resources.Limits = v1.ResourceList{
-			v1.ResourceCPU:    resource.MustParse(fmt.Sprintf("%.2f", c.Cpu)),
-			v1.ResourceMemory: resource.MustParse(fmt.Sprintf("%.1fG", c.Memory)),
-		}
-
-		containers = append(containers, container)
-		containerStatus := v1.ContainerStatus{
-			Name:                 c.Name,
-			State:                eciContainerStateToContainerState(c.CurrentState),
-			LastTerminationState: eciContainerStateToContainerState(c.PreviousState),
-			Ready:                eciStateToPodPhase(c.CurrentState.State) == v1.PodRunning,
-			RestartCount:         int32(c.RestartCount),
-			Image:                c.Image,
-			ImageID:              "",
-			ContainerID:          c.Id,
-		}
-
-		// Add to containerStatuses
-		containerStatuses = append(containerStatuses, containerStatus)
-	}
-
-	pod := v1.Pod{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Pod",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              cg.PodName,
-			Namespace:         cg.Namespace,
-			ClusterName:       ClusterId,
-			UID:               types.UID(cg.ContainerGroupId),
-			CreationTimestamp: podCreationTimestamp,
-		},
-		Spec: v1.PodSpec{
-			NodeName:   NodeName,
-			Volumes:    []v1.Volume{},
-			Containers: containers,
-		},
-		Status: v1.PodStatus{
-			Phase:             eciStateToPodPhase(eciState),
-			Conditions:        eciStateToPodConditions(eciState, podCreationTimestamp),
-			Message:           cg.TaskState,
-			Reason:            "",
-			HostIP:            cg.IntranetIp,
-			PodIP:             cg.IntranetIp,
-			StartTime:         &containerStartTime,
-			ContainerStatuses: containerStatuses,
-		},
-	}
-
-	return &pod, nil
-}
-
-func eciStateToPodPhase(state string) v1.PodPhase {
-	switch state {
-	case "Scheduling":
-		return v1.PodPending
-	case "ScheduleFailed":
-		return v1.PodFailed
-	case "Pending":
-		return v1.PodPending
-	case "Running":
-		return v1.PodRunning
-	case "Failed":
-		return v1.PodFailed
-	case "Succeeded":
-		return v1.PodSucceeded
-	}
-	return v1.PodUnknown
-}
-
-func eciStateToPodConditions(state string, transitionTime metav1.Time) []v1.PodCondition {
-	switch state {
-	case "Running", "Succeeded":
-		return []v1.PodCondition{
-			v1.PodCondition{
-				Type:               v1.PodReady,
-				Status:             v1.ConditionTrue,
-				LastTransitionTime: transitionTime,
-			}, v1.PodCondition{
-				Type:               v1.PodInitialized,
-				Status:             v1.ConditionTrue,
-				LastTransitionTime: transitionTime,
-			}, v1.PodCondition{
-				Type:               v1.PodScheduled,
-				Status:             v1.ConditionTrue,
-				LastTransitionTime: transitionTime,
-			},
-		}
-	}
-	return []v1.PodCondition{}
-}
-
-func eciContainerStateToContainerState(cs *ContainerState) v1.ContainerState {
-	if cs == nil {
-		return v1.ContainerState{}
-	}
-	t1, err := time.Parse(timeFormat, cs.StartTime)
-	if err != nil {
-		return v1.ContainerState{}
-	}
-
-	startTime := metav1.NewTime(t1)
-
-	// Handle the case where the container is running.
-	if cs.State == "Running" || cs.State == "Succeeded" {
-		return v1.ContainerState{
-			Running: &v1.ContainerStateRunning{
-				StartedAt: startTime,
-			},
-		}
-	}
-
-	t2, err := time.Parse(timeFormat, cs.FinishTime)
-	if err != nil {
-		return v1.ContainerState{}
-	}
-
-	finishTime := metav1.NewTime(t2)
-
-	// Handle the case where the container failed.
-	if cs.State == "Failed" || cs.State == "Canceled" {
-		return v1.ContainerState{
-			Terminated: &v1.ContainerStateTerminated{
-				ExitCode:   int32(cs.ExitCode),
-				Reason:     cs.State,
-				Message:    cs.DetailStatus,
-				StartedAt:  startTime,
-				FinishedAt: finishTime,
-			},
-		}
-	}
-
-	// Handle the case where the container is pending.
-	// Which should be all other eci states.
-	return v1.ContainerState{
-		Waiting: &v1.ContainerStateWaiting{
-			Reason:  cs.State,
-			Message: cs.DetailStatus,
-		},
-	}
-}
-
-func (p *ECIProvider) getVolumes(pod *v1.Pod) ([]Volume, error) {
-	volumes := make([]Volume, 0, len(pod.Spec.Volumes))
-	for _, v := range pod.Spec.Volumes {
-		// Handle the case for the EmptyDir.
-		if v.EmptyDir != nil {
-			volumes = append(volumes, Volume{
-				Type:                 VOL_TYPE_EMPTYDIR,
-				Name:                 v.Name,
-				EmptyDirVolumeEnable: true,
-			})
-			continue
-		}
-
-		// Handle the case for the NFS.
-		if v.NFS != nil {
-			volumes = append(volumes, Volume{
-				Type:              VOL_TYPE_NFS,
-				Name:              v.Name,
-				NfsVolumeServer:   v.NFS.Server,
-				NfsVolumePath:     v.NFS.Path,
-				NfsVolumeReadOnly: v.NFS.ReadOnly,
-			})
-			continue
-		}
-
-		// Handle the case for ConfigMap volume.
-		if v.ConfigMap != nil {
-			ConfigFileToPaths := make([]ConfigFileToPath, 0)
-			configMap, err := p.resourceManager.GetConfigMap(v.ConfigMap.Name, pod.Namespace)
-			if v.ConfigMap.Optional != nil && !*v.ConfigMap.Optional && k8serr.IsNotFound(err) {
-				return nil, fmt.Errorf("ConfigMap %s is required by Pod %s and does not exist", v.ConfigMap.Name, pod.Name)
-			}
-			if configMap == nil {
-				continue
-			}
-
-			for k, v := range configMap.Data {
-				var b bytes.Buffer
-				enc := base64.NewEncoder(base64.StdEncoding, &b)
-				enc.Write([]byte(v))
-
-				ConfigFileToPaths = append(ConfigFileToPaths, ConfigFileToPath{Path: k, Content: b.String()})
-			}
-
-			if len(ConfigFileToPaths) != 0 {
-				volumes = append(volumes, Volume{
-					Type:              VOL_TYPE_CONFIGFILEVOLUME,
-					Name:              v.Name,
-					ConfigFileToPaths: ConfigFileToPaths,
-				})
-			}
-			continue
-		}
-
-		if v.Secret != nil {
-			ConfigFileToPaths := make([]ConfigFileToPath, 0)
-			secret, err := p.resourceManager.GetSecret(v.Secret.SecretName, pod.Namespace)
-			if v.Secret.Optional != nil && !*v.Secret.Optional && k8serr.IsNotFound(err) {
-				return nil, fmt.Errorf("Secret %s is required by Pod %s and does not exist", v.Secret.SecretName, pod.Name)
-			}
-			if secret == nil {
-				continue
-			}
-			for k, v := range secret.Data {
-				var b bytes.Buffer
-				enc := base64.NewEncoder(base64.StdEncoding, &b)
-				enc.Write(v)
-				ConfigFileToPaths = append(ConfigFileToPaths, ConfigFileToPath{Path: k, Content: b.String()})
-			}
-
-			if len(ConfigFileToPaths) != 0 {
-				volumes = append(volumes, Volume{
-					Type:              VOL_TYPE_CONFIGFILEVOLUME,
-					Name:              v.Name,
-					ConfigFileToPaths: ConfigFileToPaths,
-				})
-			}
-			continue
-		}
-
-		// If we've made it this far we have found a volume type that isn't supported
-		return nil, fmt.Errorf("Pod %s requires volume %s which is of an unsupported type\n", pod.Name, v.Name)
-	}
-
-	return volumes, nil
-}
-
-func makeStorageType(pod *v1.Pod) (t string, size int) {
-	t = pod.Annotations["eci-storage-type"]
-	s := pod.Annotations["eci-storage-size"]
-	if t == "" {
-		t = "high_disk"
-	}
-	if s == "" {
-		s = "20"
-	}
-	size, _ = strconv.Atoi(s)
-	if size == 0 {
-		size = 20
-	}
-	return t, size
 }

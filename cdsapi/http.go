@@ -59,22 +59,15 @@ func DoOpenApiRequest(ctx context.Context, req *CloudRequest, staggered int) (re
 	if staggered != 0 {
 		Staggered(staggered)
 	}
-	for i := 0; i < 3; i++ {
-		reqUrl := getUrl(req)
-		b, _ := json.Marshal(req.body)
-		resp, err = DoRequest(req.method, reqUrl, bytes.NewReader(b))
-		if err != nil {
-			log.G(ctx).WithField("Action", req.action).Error(err)
-			time.Sleep(10 * time.Second)
-			continue
-		} else if resp.StatusCode >= 500 {
-			log.G(ctx).WithField("Action", req.action).Error(fmt.Sprintf("code: %v, content: %v", resp.StatusCode, string(b)))
-			time.Sleep(10 * time.Second)
-			continue
-		} else {
-			log.G(ctx).WithField("Action", req.action).Debug(fmt.Sprintf("code: %v, content: %v", resp.StatusCode, string(b)))
-			break
-		}
+	reqUrl := getUrl(req)
+	b, _ := json.Marshal(req.body)
+	resp, err = DoRequest(req.method, reqUrl, bytes.NewReader(b))
+	log.G(ctx).WithField("Action", req.action).Debug("request: ", req.action)
+	if err != nil {
+		return nil, err
+	} else if resp.StatusCode >= 400 {
+		log.G(ctx).WithField("Action", req.action).Error(fmt.Sprintf("code: %v, req: %v", resp.StatusCode, string(b)))
+		return resp, nil
 	}
 	return
 }
@@ -144,29 +137,33 @@ type Response struct {
 	Data     interface{} `json:"Data"`
 }
 
-func CdsRespDeal(ctx context.Context, response *http.Response, action string, data interface{}) (string, string, error) {
+func CdsRespDeal(ctx context.Context, response *http.Response, action string, data interface{}) (int, error) {
 	content, err := io.ReadAll(response.Body)
 	if err != nil {
-		return "", error.Error(err), err
+		return 0, err
 	}
-	log.G(ctx).WithField("Action", action).Debug(string(content))
+	if action != "DescribeContainerGroups" {
+		log.G(ctx).WithField("Action", action).Debug(string(content))
+	}
+
 	if response.StatusCode >= 400 {
-		return "", "", fmt.Errorf("[%v]: %v", response.StatusCode, string(content))
+		log.G(ctx).WithField("Action", action).Error(string(content))
+		return response.StatusCode, fmt.Errorf("[%v]: %v", response.StatusCode, string(content))
 	}
 	var res Response
 	err = json.Unmarshal(content, &res)
 	if err != nil {
-		return "", error.Error(err), err
+		return 0, fmt.Errorf("%v", "resp json err")
 	}
 	b, err := json.Marshal(res.Data)
 	if err != nil {
-		return "", error.Error(err), err
+		return 0, fmt.Errorf("%v", "resp json err")
 	}
 	if data != nil {
 		err = json.Unmarshal(b, data)
 		if err != nil {
-			return "", error.Error(err), err
+			return 0, fmt.Errorf("%v", "resp json err")
 		}
 	}
-	return res.Code, res.Message, nil
+	return response.StatusCode, nil
 }
