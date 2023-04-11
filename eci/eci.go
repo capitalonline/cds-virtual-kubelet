@@ -174,11 +174,11 @@ func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 	//if pod.Status.Phase == v1.PodRunning {
 	//	p.UpdateCacheStat(ctx, fmt.Sprintf("%s-%s", pod.Namespace, pod.Name), "running")
 	//}
-	if pod.Status.Message == "error" {
-		// p.UpdateCacheStat(ctx, fmt.Sprintf("%s-%s", pod.Namespace, pod.Name), "error")
-		log.G(ctx).WithField("CDS", "UpdatePod").Error("cds pod task error")
-		return fmt.Errorf("%v", pod.Status.Message)
-	}
+	//if pod.Status.Message == "error" {
+	//	// p.UpdateCacheStat(ctx, fmt.Sprintf("%s-%s", pod.Namespace, pod.Name), "error")
+	//	log.G(ctx).WithField("CDS", "UpdatePod").Error("cds pod task error")
+	//	return fmt.Errorf("%v", pod.Status.Message)
+	//}
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
