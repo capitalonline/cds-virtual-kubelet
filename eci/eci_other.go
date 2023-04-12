@@ -16,7 +16,8 @@ import (
 const podTagTimeFormat = "2006-01-02T15-04-05Z"
 const timeFormat = "2006-01-02T15:04:05Z"
 
-func (p *ECIProvider) GetPodByCondition(ctx context.Context, namespace, name string) (*v1.Pod, error) {
+func (p *ECIProvider) GetPodByCondition(ctx context.Context, source, namespace, name string) (*v1.Pod, error) {
+	log.G(ctx).WithField("CDS", "GetPodByCondition").Warn(source+": get cds eci: ", name+"-"+namespace)
 	cgs, code, err := p.GetCgs(ctx, namespace, name)
 	if err != nil {
 		return nil, err
@@ -28,10 +29,10 @@ func (p *ECIProvider) GetPodByCondition(ctx context.Context, namespace, name str
 			cg := cgs[0]
 			return containerGroupToPod(&cg)
 		} else if len(cgs) > 1 {
-			log.G(ctx).WithField("CDS", "GetPodByCondition").Debug("get pod is non-uniqueness: ", name+" "+namespace)
+			log.G(ctx).WithField("CDS", "GetPodByCondition").Warn(source+": get pod is non-uniqueness: ", name+" "+namespace)
 			return nil, nil
 		} else {
-			log.G(ctx).WithField("CDS", "GetPodByCondition").Debug("get pod is null ", name+" "+namespace)
+			log.G(ctx).WithField("CDS", "GetPodByCondition").Debug(source+": get pod is null ", name+" "+namespace)
 			return nil, nil
 		}
 	}

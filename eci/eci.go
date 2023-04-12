@@ -227,16 +227,12 @@ func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 }
 
 func (p *ECIProvider) GetPod(ctx context.Context, namespace, name string) (*v1.Pod, error) {
-	if strings.Contains(name, "disk-csi-cds-node") {
+	if strings.Contains(name, "disk-csi-cds-node") ||
+		strings.Contains(name, "nas-csi-cds-node") ||
+		strings.Contains(name, "oss-csi-cds-node") {
 		return nil, nil
 	}
-	if strings.Contains(name, "nas-csi-cds-node") {
-		return nil, nil
-	}
-	if strings.Contains(name, "oss-csi-cds-node") {
-		return nil, nil
-	}
-	pod, err := p.GetPodByCondition(ctx, namespace, name)
+	pod, err := p.GetPodByCondition(ctx, "K8s-GetPod", namespace, name)
 	if err != nil {
 		log.G(ctx).WithField("CDS", "GetPod").Error("get pod err: ", err)
 		return nil, err
@@ -268,7 +264,12 @@ func (p *ECIProvider) RunInContainer(ctx context.Context, namespace, podName, co
 // GetPodStatus returns the status of a pod by name that is running inside ECI
 // returns nil if a pod by that name is not found.
 func (p *ECIProvider) GetPodStatus(ctx context.Context, namespace, name string) (*v1.PodStatus, error) {
-	pod, err := p.GetPod(ctx, namespace, name)
+	if strings.Contains(name, "disk-csi-cds-node") ||
+		strings.Contains(name, "nas-csi-cds-node") ||
+		strings.Contains(name, "oss-csi-cds-node") {
+		return nil, fmt.Errorf("invalid pod")
+	}
+	pod, err := p.GetPodByCondition(ctx, "Provider-GetPodStatus", namespace, name)
 	if err != nil {
 		log.G(ctx).WithField("CDS", "GetPodStatus").Error(fmt.Sprintf("%s-%s status err: %s", namespace, name, err))
 		return nil, err
