@@ -245,12 +245,14 @@ func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	response, err := cdsapi.DoOpenApiRequest(ctx, cckRequest, 0)
 	if err != nil {
 		log.G(ctx).WithField("Action", DeleteContainerGroupAction).Error(err)
+		if response != nil {
+			if response.StatusCode >= 400 && response.StatusCode < 500 {
+				return nil
+			}
+		}
 		return err
 	}
-	content, err := io.ReadAll(response.Body)
-	if err != nil {
-		return err
-	}
+	content, _ := io.ReadAll(response.Body)
 	log.G(ctx).WithField("Action", DeleteContainerGroupAction).Debug(string(content))
 	return nil
 }
