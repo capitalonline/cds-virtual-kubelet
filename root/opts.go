@@ -2,7 +2,6 @@ package root
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/capitalonline/cds-virtual-kubelet/eci"
 	"os"
 	"strconv"
@@ -118,9 +117,6 @@ func SetDefaultOpts(c *Opts) error {
 		err := json.Unmarshal([]byte(vkTaintStr), &l)
 		if err == nil {
 			c.Taints = append(c.Taints, l...)
-			fmt.Println("TAINTS", c.Taints)
-		} else {
-			fmt.Println("TAINTS json err")
 		}
 	}
 
