@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 )
 
 // ECIProvider implements the virtual-kubelet provider interface and communicates with Alibaba Cloud's ECI APIs.
@@ -29,15 +28,6 @@ type ECIProvider struct {
 	pods               string
 	internalIP         string
 	daemonEndpointPort int32
-	cache              map[string]PodCache
-}
-
-type PodCache struct {
-	PodName          string
-	Namespace        string
-	State            string
-	CreateTime       time.Time
-	SimpleContainers []map[string]string
 }
 
 // AuthConfig is the secret returned from an ImageRegistryCredential
@@ -67,8 +57,6 @@ func NewECIProvider(rm *manager.ResourceManager, nodeName, operatingSystem strin
 	p.internalIP = internalIP
 	p.daemonEndpointPort = daemonEndpointPort
 
-	p.cache = make(map[string]PodCache)
-
 	return &p, err
 }
 
@@ -88,8 +76,8 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		ownerMap["kind"] = pod.OwnerReferences[0].Kind
 		ownerMap["name"] = pod.OwnerReferences[0].Name
 	}
-	log.G(ctx).WithField("CDS", "CreatePod").Debug(fmt.Sprintf("create pod: %v, %v, %v, %v, %v",
-		pod.Namespace, pod.Name, pod.Status.Phase, pod.Status.Reason, pod.Status.Message))
+	log.G(ctx).WithField("CDS", "CreatePod").Debug(fmt.Sprintf("create pod: %v, %v, %v, %v",
+		pod.Namespace, pod.Name, pod.Status.Phase, pod.Status.Reason))
 
 	request := CreateContainerGroup{}
 	request.RestartPolicy = string(pod.Spec.RestartPolicy)
@@ -99,14 +87,6 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	if err != nil {
 		return err
 	}
-	//for _, con := range containers {
-	//	simContainers = append(simContainers, map[string]string{
-	//		"name":  con.Name,
-	//		"image": con.Image,
-	//		"cpu":   fmt.Sprintf("%.2f", cpu),
-	//		"mem":   fmt.Sprintf("%.1fG", mem),
-	//	})
-	//}
 	initContainers, icpu, imem, err := p.getContainers(pod, true)
 	if err != nil {
 		return err
@@ -157,13 +137,6 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 			return err
 		}
 	}
-	//p.SetCache(ctx, request.ContainerGroupName, PodCache{
-	//	PodName:          pod.Name,
-	//	Namespace:        pod.Namespace,
-	//	State:            "create",
-	//	CreateTime:       pod.CreationTimestamp.UTC(),
-	//	SimpleContainers: simContainers,
-	//})
 	return nil
 }
 
@@ -171,14 +144,6 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 	log.G(ctx).WithField("CDS", "UpdatePod").Debug(
 		fmt.Sprintf("update pod: %v, %v, %v, %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
-	//if pod.Status.Phase == v1.PodRunning {
-	//	p.UpdateCacheStat(ctx, fmt.Sprintf("%s-%s", pod.Namespace, pod.Name), "running")
-	//}
-	//if pod.Status.Message == "error" {
-	//	// p.UpdateCacheStat(ctx, fmt.Sprintf("%s-%s", pod.Namespace, pod.Name), "error")
-	//	log.G(ctx).WithField("CDS", "UpdatePod").Error("cds pod task error")
-	//	return fmt.Errorf("%v", pod.Status.Message)
-	//}
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
@@ -218,13 +183,13 @@ func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 // DeletePod deletes the specified pod out of ECI.
 func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	eciId := ""
-	// p.DeleteCache(ctx, fmt.Sprintf("%s-%s", pod.Namespace, pod.Name))
 	if pod.Annotations != nil {
 		eciId = pod.Annotations["eci-instance-id"]
 	}
 	if eciId == "" {
 		cgs, _, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
-		log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("delete pod: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
+		log.G(ctx).WithField("CDS", "cds-debug").Debug(
+			fmt.Sprintf("delete pod: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
 		if len(cgs) == 1 {
 			eciId = cgs[0].ContainerGroupId
 		} else if len(cgs) > 1 {
@@ -236,10 +201,8 @@ func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 		}
 	}
 	if eciId == "" {
-		log.G(ctx).WithField("CDS", "cds-debug").Debug(fmt.Sprintf("delete pod fail: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
 		return errdefs.NotFoundf(" can't find Pod %s", pod.Name)
 	}
-
 	cckRequest, _ := cdsapi.NewCCKRequest(ctx, DeleteContainerGroupAction, http.MethodPost, nil,
 		DeleteContainerGroup{ContainerGroupId: eciId})
 	response, err := cdsapi.DoOpenApiRequest(ctx, cckRequest, 0)

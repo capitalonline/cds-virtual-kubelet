@@ -124,12 +124,12 @@ func SetDefaultOpts(c *Opts) error {
 				},
 			}
 		} else {
-			c.Taints = l
-			c.Taints = append(c.Taints, VKTaint{
+			l = append(l, VKTaint{
 				Key:    DefaultTaintKey,
 				Value:  ProviderName,
 				Effect: DefaultTaintEffect,
 			})
+			c.Taints = l
 		}
 	}
 

@@ -9,8 +9,11 @@ import (
 )
 
 const (
-	defaultApiHost = "http://cdsapi.capitalonline.net"
-	// preApiHost             = "http://cdsapi-gateway.gic.pre/openapi"
+	CUSTOMER_ID = "CUSTOMER_ID"
+	USER_ID     = "USER_ID"
+)
+
+const (
 	accessKeyIdLiteral     = "CDS_ACCESS_KEY_ID"
 	accessKeySecretLiteral = "CDS_ACCESS_KEY_SECRET"
 	cckProductType         = "cck"

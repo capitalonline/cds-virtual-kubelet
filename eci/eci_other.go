@@ -22,16 +22,6 @@ func (p *ECIProvider) GetPodByCondition(ctx context.Context, namespace, name str
 		return nil, err
 	}
 	if code >= 500 {
-		//data, ok := p.GetCache(ctx, fmt.Sprintf("%s-%s", namespace, name))
-		//if !ok {
-		//	return nil, nil
-		//} else {
-		//	if data.State == "create" {
-		//		return defaultPod(data)
-		//	} else {
-		//		return nil, fmt.Errorf("%v", code)
-		//	}
-		//}
 		return nil, err
 	} else {
 		if len(cgs) == 1 {
@@ -65,9 +55,6 @@ func (p *ECIProvider) GetCgs(ctx context.Context, namespace, name string) ([]Con
 		return nil, 0, err
 	}
 	code, err := cdsapi.CdsRespDeal(ctx, response, DescribeContainerGroups, &cgs)
-	//if code >= 500 {
-	//	return nil, code, nil
-	//}
 	if err != nil {
 		log.G(ctx).WithField("CDS", "GetCgs").Error(err)
 		return nil, code, err
@@ -267,33 +254,4 @@ func (p *ECIProvider) getVolumes(pod *v1.Pod) ([]Volume, error) {
 	}
 
 	return volumes, nil
-}
-
-func (p *ECIProvider) SetCache(ctx context.Context, key string, val PodCache) {
-	p.Lock()
-	defer p.Unlock()
-	p.cache[key] = val
-}
-
-func (p *ECIProvider) UpdateCacheStat(ctx context.Context, key string, stat string) {
-	p.Lock()
-	defer p.Unlock()
-	v, ok := p.cache[key]
-	if ok {
-		v.State = stat
-		p.cache[key] = v
-	}
-}
-
-func (p *ECIProvider) DeleteCache(ctx context.Context, key string) {
-	p.Lock()
-	defer p.Unlock()
-	delete(p.cache, key)
-}
-
-func (p *ECIProvider) GetCache(ctx context.Context, key string) (PodCache, bool) {
-	p.RLock()
-	defer p.RUnlock()
-	v, ok := p.cache[key]
-	return v, ok
 }

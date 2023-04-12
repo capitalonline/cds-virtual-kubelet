@@ -11,86 +11,6 @@ import (
 	"time"
 )
 
-func defaultPod(cache PodCache) (*v1.Pod, error) {
-	var podCreationTimestamp, containerStartTime metav1.Time
-	podCreationTimestamp = metav1.NewTime(cache.CreateTime)
-	containerStartTime = metav1.NewTime(cache.CreateTime)
-
-	containers := make([]v1.Container, 0, len(cache.SimpleContainers))
-	containerStatuses := make([]v1.ContainerStatus, 0, len(cache.SimpleContainers))
-	for _, c := range cache.SimpleContainers {
-		container := v1.Container{
-			Name:  c["name"],
-			Image: c["image"],
-			Resources: v1.ResourceRequirements{
-				Requests: v1.ResourceList{
-					v1.ResourceCPU:    resource.MustParse(c["cpu"]),
-					v1.ResourceMemory: resource.MustParse(c["mem"]),
-				},
-			},
-		}
-
-		container.Resources.Limits = v1.ResourceList{
-			v1.ResourceCPU:    resource.MustParse(c["cpu"]),
-			v1.ResourceMemory: resource.MustParse(c["mem"]),
-		}
-
-		containers = append(containers, container)
-		containerStatus := v1.ContainerStatus{
-			Name: c["name"],
-			State: v1.ContainerState{
-				Waiting: &v1.ContainerStateWaiting{
-					Reason:  "Scheduling",
-					Message: "default init",
-				},
-			},
-			LastTerminationState: v1.ContainerState{
-				Waiting: &v1.ContainerStateWaiting{
-					Reason:  "Scheduling",
-					Message: "default init",
-				},
-			},
-			Ready:        false,
-			RestartCount: 0,
-			Image:        c["image"],
-			ImageID:      "",
-			ContainerID:  "",
-		}
-
-		// Add to containerStatuses
-		containerStatuses = append(containerStatuses, containerStatus)
-	}
-
-	pod := v1.Pod{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Pod",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              cache.PodName,
-			Namespace:         cache.Namespace,
-			ClusterName:       ClusterId,
-			CreationTimestamp: podCreationTimestamp,
-		},
-		Spec: v1.PodSpec{
-			NodeName:   NodeName,
-			Volumes:    []v1.Volume{},
-			Containers: containers,
-		},
-		Status: v1.PodStatus{
-			Phase:             v1.PodPending,
-			Conditions:        nil,
-			Message:           "",
-			Reason:            "",
-			HostIP:            "",
-			PodIP:             "",
-			StartTime:         &containerStartTime,
-			ContainerStatuses: containerStatuses,
-		},
-	}
-	return &pod, nil
-}
-
 func containerGroupToPod(cg *ContainerGroup) (*v1.Pod, error) {
 	if cg == nil {
 		return nil, nil
@@ -110,8 +30,6 @@ func containerGroupToPod(cg *ContainerGroup) (*v1.Pod, error) {
 		}
 	}
 
-	// Use the Provisioning State if it's not Succeeded,
-	// otherwise use the state of the instance.
 	eciState := cg.Status
 
 	containers := make([]v1.Container, 0, len(cg.Containers))

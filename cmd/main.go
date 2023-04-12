@@ -16,11 +16,12 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
 var (
-	buildVersion = "N/A"
-	buildTime    = "N/A"
+	buildVersion = "v1.0.0"
+	buildTime    = time.Now().UTC().Format("2006-01-02 15:04:05")
 	k8sVersion   = "v1.19.3"
 )
 
@@ -55,7 +56,7 @@ func main() {
 		return nil
 	}
 
-	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "debug", `set the log level, e.g. "debug", "info", "warn", "error"`)
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "debug", `e.g. "debug", "info", "warn", "error"`)
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if logLevel != "" {

@@ -36,8 +36,3 @@ func Run(name string, arg ...string) (string, error) {
 	}
 	return stdoutBuf.String(), nil
 }
-
-func CmdToNode(command string) (string, error) {
-	newCmd := fmt.Sprintf("nsenter -m -u -i -n -p -t 1 sh -c \"%s\"", command)
-	return Run("sh", "-c", newCmd)
-}

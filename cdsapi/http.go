@@ -31,10 +31,10 @@ func NewCCKRequest(ctx context.Context, action, method string, params map[string
 	if params == nil {
 		params = make(map[string]string)
 	}
-	if customerId := os.Getenv("CUSTOMER_ID"); customerId != "" {
+	if customerId := os.Getenv(CUSTOMER_ID); customerId != "" {
 		params["CustomerId"] = customerId
 	}
-	if userId := os.Getenv("USER_ID"); userId != "" {
+	if userId := os.Getenv(USER_ID); userId != "" {
 		params["UserId"] = userId
 	}
 	return NewRequest(action, method, params, cckProductType, body), nil
@@ -62,12 +62,11 @@ func DoOpenApiRequest(ctx context.Context, req *CloudRequest, staggered int) (re
 	reqUrl := getUrl(req)
 	b, _ := json.Marshal(req.body)
 	resp, err = DoRequest(req.method, reqUrl, bytes.NewReader(b))
-	log.G(ctx).WithField("Action", req.action).Debug("request: ", req.action)
 	if err != nil {
 		return nil, err
-	} else if resp.StatusCode >= 400 {
-		log.G(ctx).WithField("Action", req.action).Error(fmt.Sprintf("code: %v, req: %v", resp.StatusCode, string(b)))
-		return resp, nil
+	}
+	if resp.StatusCode >= 400 {
+		log.G(ctx).WithField("Action", req.action).Warn(fmt.Sprintf("code: %v, req: %v", resp.StatusCode, string(b)))
 	}
 	return
 }
@@ -148,7 +147,7 @@ func CdsRespDeal(ctx context.Context, response *http.Response, action string, da
 
 	if response.StatusCode >= 400 {
 		log.G(ctx).WithField("Action", action).Error(string(content))
-		return response.StatusCode, fmt.Errorf("[%v]: %v", response.StatusCode, string(content))
+		return response.StatusCode, fmt.Errorf("<%v>: %v", response.StatusCode, string(content))
 	}
 	var res Response
 	err = json.Unmarshal(content, &res)
