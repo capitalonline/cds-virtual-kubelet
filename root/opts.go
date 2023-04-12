@@ -2,6 +2,7 @@ package root
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/capitalonline/cds-virtual-kubelet/eci"
 	"os"
 	"strconv"
@@ -103,33 +104,23 @@ func SetDefaultOpts(c *Opts) error {
 	}
 
 	c.KubeNamespace = DefaultKubeNamespace
+	c.Taints = []VKTaint{
+		VKTaint{
+			Key:    DefaultTaintKey,
+			Value:  ProviderName,
+			Effect: DefaultTaintEffect,
+		},
+	}
+
 	vkTaintStr := os.Getenv("TAINTS")
-	if vkTaintStr == "" {
-		c.Taints = []VKTaint{
-			VKTaint{
-				Key:    DefaultTaintKey,
-				Value:  ProviderName,
-				Effect: DefaultTaintEffect,
-			},
-		}
-	} else {
+	if vkTaintStr != "" {
 		var l []VKTaint
 		err := json.Unmarshal([]byte(vkTaintStr), &l)
-		if err != nil {
-			c.Taints = []VKTaint{
-				VKTaint{
-					Key:    DefaultTaintKey,
-					Value:  ProviderName,
-					Effect: DefaultTaintEffect,
-				},
-			}
+		if err == nil {
+			c.Taints = append(c.Taints, l...)
+			fmt.Println("TAINTS", c.Taints)
 		} else {
-			l = append(l, VKTaint{
-				Key:    DefaultTaintKey,
-				Value:  ProviderName,
-				Effect: DefaultTaintEffect,
-			})
-			c.Taints = l
+			fmt.Println("TAINTS json err")
 		}
 	}
 
