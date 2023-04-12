@@ -61,6 +61,7 @@ func DoOpenApiRequest(ctx context.Context, req *CloudRequest, staggered int) (re
 	}
 	reqUrl := getUrl(req)
 	b, _ := json.Marshal(req.body)
+	log.G(ctx).WithField("Action", req.action).Info(fmt.Sprintf("code: %v, req: %v", resp.StatusCode, string(b)))
 	resp, err = DoRequest(req.method, reqUrl, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
@@ -117,7 +118,7 @@ func getUrl(req *CloudRequest) string {
 		urlVal.Add(k, v)
 	}
 	urlValStr := urlVal.Encode()
-	reqUrl := fmt.Sprintf("%s/%s?%s", APIHost, req.productType, urlValStr)
+	reqUrl := fmt.Sprintf("%s?%s", APIHost, urlValStr)
 	return reqUrl
 }
 
@@ -141,9 +142,8 @@ func CdsRespDeal(ctx context.Context, response *http.Response, action string, da
 	if err != nil {
 		return 0, err
 	}
-	if action != "DescribeContainerGroups" {
-		log.G(ctx).WithField("Action", action).Debug(string(content))
-	}
+
+	log.G(ctx).WithField("Action", action).Debug(string(content))
 
 	if response.StatusCode >= 400 {
 		log.G(ctx).WithField("Action", action).Error(string(content))
