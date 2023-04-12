@@ -131,10 +131,9 @@ func percentEncode(str string) string {
 }
 
 type Response struct {
-	Code     string      `json:"Code"`
-	Message  string      `json:"Message"`
-	CodeDesc string      `json:"codeDesc,omitempty"`
-	Data     interface{} `json:"Data"`
+	Code    string      `json:"code"`
+	Message string      `json:"msg"`
+	Data    interface{} `json:"data"`
 }
 
 func CdsRespDeal(ctx context.Context, response *http.Response, action string, data interface{}) (int, error) {
