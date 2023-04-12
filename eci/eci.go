@@ -187,9 +187,13 @@ func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 		eciId = pod.Annotations["eci-instance-id"]
 	}
 	if eciId == "" {
-		cgs, _, _ := p.GetCgs(ctx, pod.Namespace, pod.Name)
-		log.G(ctx).WithField("CDS", "cds-debug").Debug(
+		cgs, code, err := p.GetCgs(ctx, pod.Namespace, pod.Name)
+		log.G(ctx).WithField("CDS", "DeletePod").Debug(
 			fmt.Sprintf("delete pod: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
+		if err != nil || code >= 400 {
+			log.G(ctx).WithField("CDS", "DeletePod").Debug(
+				fmt.Sprintf("get cg error: %v %v", code, err))
+		}
 		if len(cgs) == 1 {
 			eciId = cgs[0].ContainerGroupId
 		} else if len(cgs) > 1 {
@@ -201,6 +205,8 @@ func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 		}
 	}
 	if eciId == "" {
+		log.G(ctx).WithField("CDS", "DeletePod").Error(
+			fmt.Sprintf("can't find Pod %s id", pod.Name))
 		return errdefs.NotFoundf(" can't find Pod %s", pod.Name)
 	}
 	cckRequest, _ := cdsapi.NewCCKRequest(ctx, DeleteContainerGroupAction, http.MethodPost, nil,
