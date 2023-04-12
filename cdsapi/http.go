@@ -61,14 +61,14 @@ func DoOpenApiRequest(ctx context.Context, req *CloudRequest, staggered int) (re
 	}
 	reqUrl := getUrl(req)
 	b, _ := json.Marshal(req.body)
-	log.G(ctx).WithField("Action", req.action).Info(fmt.Sprintf("code: %v, req: %v", resp.StatusCode, string(b)))
 	resp, err = DoRequest(req.method, reqUrl, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode >= 400 {
-		log.G(ctx).WithField("Action", req.action).Warn(fmt.Sprintf("code: %v, req: %v", resp.StatusCode, string(b)))
-	}
+	log.G(ctx).WithField("Action", req.action).Debug(fmt.Sprintf("code: %v, req: %v", resp.StatusCode, string(b)))
+	//if resp.StatusCode >= 400 {
+	//	log.G(ctx).WithField("Action", req.action).Warn(fmt.Sprintf("code: %v, req: %v", resp.StatusCode, string(b)))
+	//}
 	return
 }
 
