@@ -47,7 +47,7 @@ func init() {
 	}
 
 	if devIp := os.Getenv("DEV_IP"); devIp != "" {
-		_, _ = Run("sh", "-c", fmt.Sprintf("echo '%s  openapi.gic.test' >> /etc/hosts", devIp))
+		_, _ = Run("sh", "-c", fmt.Sprintf("echo '%s  gateway.gic.test' >> /etc/hosts", devIp))
 	}
 
 	dnsDeal()
