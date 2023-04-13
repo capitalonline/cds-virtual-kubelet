@@ -65,6 +65,7 @@ func DoOpenApiRequest(ctx context.Context, req *CloudRequest, staggered int) (re
 	if err != nil {
 		return nil, err
 	}
+	log.G(ctx).WithField("Action", req.action).Warn(reqUrl)
 	log.G(ctx).WithField("Action", req.action).Debug(fmt.Sprintf("code: %v, req: %v", resp.StatusCode, string(b)))
 	//if resp.StatusCode >= 400 {
 	//	log.G(ctx).WithField("Action", req.action).Warn(fmt.Sprintf("code: %v, req: %v", resp.StatusCode, string(b)))
@@ -77,6 +78,7 @@ func DoRequest(method, url string, body io.Reader) (resp *http.Response, err err
 	if err != nil {
 		return
 	}
+	sendRequest.Header.Set("Content-Type", " application/json")
 	resp, err = http.DefaultClient.Do(sendRequest)
 	return
 }
