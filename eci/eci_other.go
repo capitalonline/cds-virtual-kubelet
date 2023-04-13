@@ -9,8 +9,10 @@ import (
 	"github.com/virtual-kubelet/virtual-kubelet/log"
 	v1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const podTagTimeFormat = "2006-01-02T15-04-05Z"
@@ -255,4 +257,51 @@ func (p *ECIProvider) getVolumes(pod *v1.Pod) ([]Volume, error) {
 	}
 
 	return volumes, nil
+}
+
+func (p *ECIProvider) temporaryPod(namespace, name string) *v1.Pod {
+	var (
+		containerStartTime = metav1.NewTime(time.Now())
+		containerStatuses  []v1.ContainerStatus
+		podStat            = v1.PodPending
+		containerReason    = "Scheduling"
+	)
+
+	containerStatus := v1.ContainerStatus{
+		Name: name,
+		State: v1.ContainerState{
+			Waiting: &v1.ContainerStateWaiting{
+				Reason:  containerReason,
+				Message: "get status 50X",
+			},
+		},
+		LastTerminationState: v1.ContainerState{
+			Waiting: &v1.ContainerStateWaiting{
+				Reason:  containerReason,
+				Message: "get status 50X",
+			},
+		},
+		Ready:        false,
+		RestartCount: 0,
+		Image:        "",
+		ImageID:      "",
+		ContainerID:  "",
+	}
+
+	// Add to containerStatuses
+	containerStatuses = append(containerStatuses, containerStatus)
+
+	pod := v1.Pod{
+		Status: v1.PodStatus{
+			Phase:             podStat,
+			Conditions:        nil,
+			Message:           "get status 500",
+			Reason:            "",
+			HostIP:            "",
+			PodIP:             "",
+			StartTime:         &containerStartTime,
+			ContainerStatuses: containerStatuses,
+		},
+	}
+	return &pod
 }

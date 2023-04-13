@@ -25,7 +25,8 @@ type ECIProvider struct {
 	operatingSystem    string
 	cpu                string
 	memory             string
-	pods               string
+	maxPods            string
+	pods               map[string]bool
 	internalIP         string
 	daemonEndpointPort int32
 }
@@ -50,7 +51,7 @@ func NewECIProvider(rm *manager.ResourceManager, nodeName, operatingSystem strin
 
 	p.cpu = "1000"
 	p.memory = "4Ti"
-	p.pods = MaxPods
+	p.maxPods = MaxPods
 
 	p.operatingSystem = operatingSystem
 	p.nodeName = nodeName
@@ -144,6 +145,11 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 	log.G(ctx).WithField("CDS", "UpdatePod").Debug(
 		fmt.Sprintf("update pod: %v, %v, %v, %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
+	if pod.Status.Phase == v1.PodRunning {
+		p.Lock()
+		p.pods[pod.Namespace+"-"+pod.Name] = true
+		p.Unlock()
+	}
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
@@ -186,6 +192,9 @@ func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	if pod.Annotations != nil {
 		eciId = pod.Annotations["eci-instance-id"]
 	}
+	p.Lock()
+	delete(p.pods, pod.Namespace+"-"+pod.Name)
+	p.Unlock()
 	if eciId == "" {
 		cgs, code, err := p.GetCgs(ctx, pod.Namespace, pod.Name)
 		log.G(ctx).WithField("CDS", "DeletePod").Debug(
@@ -270,13 +279,17 @@ func (p *ECIProvider) GetPodStatus(ctx context.Context, namespace, name string) 
 		return nil, fmt.Errorf("invalid pod")
 	}
 	pod, err := p.GetPodByCondition(ctx, "Provider-GetPodStatus", namespace, name)
-	if err != nil {
+	if err != nil || pod == nil {
 		log.G(ctx).WithField("CDS", "GetPodStatus").Error(fmt.Sprintf("%s-%s status err: %s", namespace, name, err))
-		return nil, err
-	}
-	if pod == nil {
-		log.G(ctx).WithField("CDS", "GetPodStatus").Error(fmt.Sprintf("%s-%s status err: not found", namespace, name))
-		return nil, fmt.Errorf("pod is nil")
+		p.RLock()
+		stat := p.pods[namespace+"-"+name]
+		p.RUnlock()
+		if stat {
+			return nil, fmt.Errorf("err:%v, pod: %v", err, pod)
+		} else {
+			return &p.temporaryPod(namespace, name).Status, nil
+		}
+
 	}
 	return &pod.Status, nil
 }
@@ -306,7 +319,7 @@ func (p *ECIProvider) Capacity(ctx context.Context) v1.ResourceList {
 	return v1.ResourceList{
 		"cpu":    resource.MustParse(p.cpu),
 		"memory": resource.MustParse(p.memory),
-		"pods":   resource.MustParse(p.pods),
+		"pods":   resource.MustParse(p.maxPods),
 	}
 }
 
