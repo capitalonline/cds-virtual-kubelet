@@ -1,9 +1,7 @@
 package eci
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"github.com/capitalonline/cds-virtual-kubelet/cdsapi"
 	"github.com/virtual-kubelet/virtual-kubelet/log"
@@ -208,12 +206,12 @@ func (p *ECIProvider) getVolumes(pod *v1.Pod) ([]Volume, error) {
 				continue
 			}
 
-			for k, v := range configMap.Data {
-				var b bytes.Buffer
-				enc := base64.NewEncoder(base64.StdEncoding, &b)
-				enc.Write([]byte(v))
+			for k, content := range configMap.Data {
+				//var b bytes.Buffer
+				//enc := base64.NewEncoder(base64.StdEncoding, &b)
+				//enc.Write([]byte(v))
 
-				ConfigFileToPaths = append(ConfigFileToPaths, ConfigFileToPath{Path: k, Content: b.String()})
+				ConfigFileToPaths = append(ConfigFileToPaths, ConfigFileToPath{Path: k, Content: content})
 			}
 
 			if len(ConfigFileToPaths) != 0 {
@@ -235,11 +233,11 @@ func (p *ECIProvider) getVolumes(pod *v1.Pod) ([]Volume, error) {
 			if secret == nil {
 				continue
 			}
-			for k, v := range secret.Data {
-				var b bytes.Buffer
-				enc := base64.NewEncoder(base64.StdEncoding, &b)
-				enc.Write(v)
-				ConfigFileToPaths = append(ConfigFileToPaths, ConfigFileToPath{Path: k, Content: b.String()})
+			for k, content := range secret.Data {
+				//var b bytes.Buffer
+				//enc := base64.NewEncoder(base64.StdEncoding, &b)
+				//enc.Write(v)
+				ConfigFileToPaths = append(ConfigFileToPaths, ConfigFileToPath{Path: k, Content: string(content)})
 			}
 
 			if len(ConfigFileToPaths) != 0 {
