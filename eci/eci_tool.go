@@ -79,6 +79,9 @@ func containerGroupToPod(cg *ContainerGroup) (*v1.Pod, error) {
 			ClusterName:       ClusterId,
 			UID:               types.UID(cg.ContainerGroupId),
 			CreationTimestamp: podCreationTimestamp,
+			Annotations: map[string]string{
+				"eci-instance-id": cg.ContainerGroupId,
+			},
 		},
 		Spec: v1.PodSpec{
 			NodeName:   NodeName,
