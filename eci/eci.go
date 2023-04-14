@@ -189,6 +189,8 @@ func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 
 // DeletePod deletes the specified pod out of ECI.
 func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
+	log.G(ctx).WithField("CDS", "DeletePod").Debug(
+		fmt.Sprintf("delete pod: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
 	eciId := ""
 	if pod.Annotations != nil {
 		eciId = pod.Annotations["eci-instance-id"]
@@ -198,8 +200,6 @@ func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	p.Unlock()
 	if eciId == "" {
 		cgs, code, err := p.GetCgs(ctx, pod.Namespace, pod.Name)
-		log.G(ctx).WithField("CDS", "DeletePod").Debug(
-			fmt.Sprintf("delete pod: %v %v %v %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
 		if err != nil || code >= 400 {
 			log.G(ctx).WithField("CDS", "DeletePod").Debug(
 				fmt.Sprintf("get cg error: %v %v", code, err))
