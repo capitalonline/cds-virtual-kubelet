@@ -48,6 +48,7 @@ func NewECIProvider(rm *manager.ResourceManager, nodeName, operatingSystem strin
 	var err error
 
 	p.resourceManager = rm
+	p.pods = make(map[string]bool)
 
 	p.cpu = "1000"
 	p.memory = "4Ti"
@@ -287,7 +288,7 @@ func (p *ECIProvider) GetPodStatus(ctx context.Context, namespace, name string) 
 		if stat {
 			return nil, fmt.Errorf("err:%v, pod: %v", err, pod)
 		} else {
-			return &p.temporaryPod(namespace, name).Status, nil
+			return &p.temporaryPod(name, fmt.Sprintf("%v", err)).Status, nil
 		}
 
 	}

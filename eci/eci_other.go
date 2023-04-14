@@ -259,7 +259,7 @@ func (p *ECIProvider) getVolumes(pod *v1.Pod) ([]Volume, error) {
 	return volumes, nil
 }
 
-func (p *ECIProvider) temporaryPod(namespace, name string) *v1.Pod {
+func (p *ECIProvider) temporaryPod(name, msg string) *v1.Pod {
 	var (
 		containerStartTime = metav1.NewTime(time.Now())
 		containerStatuses  []v1.ContainerStatus
@@ -272,13 +272,13 @@ func (p *ECIProvider) temporaryPod(namespace, name string) *v1.Pod {
 		State: v1.ContainerState{
 			Waiting: &v1.ContainerStateWaiting{
 				Reason:  containerReason,
-				Message: "get status 50X",
+				Message: msg,
 			},
 		},
 		LastTerminationState: v1.ContainerState{
 			Waiting: &v1.ContainerStateWaiting{
 				Reason:  containerReason,
-				Message: "get status 50X",
+				Message: msg,
 			},
 		},
 		Ready:        false,
@@ -295,7 +295,7 @@ func (p *ECIProvider) temporaryPod(namespace, name string) *v1.Pod {
 		Status: v1.PodStatus{
 			Phase:             podStat,
 			Conditions:        nil,
-			Message:           "get status 500",
+			Message:           msg,
 			Reason:            "",
 			HostIP:            "",
 			PodIP:             "",
