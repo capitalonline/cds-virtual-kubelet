@@ -90,11 +90,11 @@ func (p *ECIProvider) getContainers(pod *v1.Pod, init bool) ([]ContainerInfo, fl
 			imageVersion = "latest"
 		}
 		c := ContainerInfo{
-
 			Name:         container.Name,
 			Image:        imageName,
 			ImageVersion: imageVersion,
-			Command:      append(container.Command, container.Args...),
+			Arg:          container.Args,
+			Command:      container.Command,
 			Ports:        make([]ContainerPort, 0, len(container.Ports)),
 		}
 
