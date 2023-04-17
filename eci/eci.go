@@ -50,7 +50,7 @@ func NewECIProvider(rm *manager.ResourceManager, nodeName, operatingSystem strin
 	p.resourceManager = rm
 	p.pods = make(map[string]bool)
 
-	p.cpu = "1000"
+	p.cpu = "50000"
 	p.memory = "4Ti"
 	p.maxPods = MaxPods
 
@@ -318,9 +318,10 @@ func (p *ECIProvider) GetPods(ctx context.Context) ([]*v1.Pod, error) {
 // Capacity returns a resource list containing the capacity limits set for ECI.
 func (p *ECIProvider) Capacity(ctx context.Context) v1.ResourceList {
 	return v1.ResourceList{
-		"cpu":    resource.MustParse(p.cpu),
-		"memory": resource.MustParse(p.memory),
-		"pods":   resource.MustParse(p.maxPods),
+		"cpu":               resource.MustParse(p.cpu),
+		"memory":            resource.MustParse(p.memory),
+		"pods":              resource.MustParse(p.maxPods),
+		"ephemeral-storage": resource.MustParse("40Ti"),
 	}
 }
 
