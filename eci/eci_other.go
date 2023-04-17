@@ -13,9 +13,6 @@ import (
 	"time"
 )
 
-const podTagTimeFormat = "2006-01-02T15-04-05Z"
-const timeFormat = "2006-01-02T15:04:05Z"
-
 func (p *ECIProvider) GetPodByCondition(ctx context.Context, source, namespace, name string) (*v1.Pod, error) {
 	log.G(ctx).WithField("CDS", "GetPodByCondition").Warn(source+": get cds eci: ", name+"-"+namespace)
 	cgs, code, err := p.GetCgs(ctx, namespace, name)
@@ -50,12 +47,12 @@ func (p *ECIProvider) GetCgs(ctx context.Context, namespace, name string) ([]Con
 		Namespace:          namespace,
 		ContainerGroupName: cname,
 	}
-	cckRequest, _ := cdsapi.NewCCKRequest(ctx, DescribeContainerGroups, http.MethodPost, nil, request)
+	cckRequest, _ := cdsapi.NewCCKRequest(ctx, DescribeContainerGroupsAction, http.MethodPost, nil, request)
 	response, err := cdsapi.DoOpenApiRequest(ctx, cckRequest, 0)
 	if err != nil {
 		return nil, 0, err
 	}
-	code, err := cdsapi.CdsRespDeal(ctx, response, DescribeContainerGroups, &cgs)
+	code, err := cdsapi.CdsRespDeal(ctx, response, DescribeContainerGroupsAction, &cgs)
 	if err != nil {
 		log.G(ctx).WithField("CDS", "GetCgs").Error(err)
 		return nil, code, err
@@ -123,6 +120,10 @@ func (p *ECIProvider) getContainers(pod *v1.Pod, init bool) ([]ContainerInfo, fl
 		}
 		if _, ok := container.Resources.Limits[v1.ResourceCPU]; ok {
 			cpuRequest = float64(container.Resources.Limits.Cpu().MilliValue()) / 1000.00
+		} else {
+			if _, ok = container.Resources.Requests[v1.ResourceCPU]; ok {
+				cpuRequest = float64(container.Resources.Requests.Cpu().MilliValue()) / 1000.00
+			}
 		}
 		c.Cpu = cpuRequest
 
@@ -132,6 +133,10 @@ func (p *ECIProvider) getContainers(pod *v1.Pod, init bool) ([]ContainerInfo, fl
 		}
 		if _, ok := container.Resources.Limits[v1.ResourceMemory]; ok {
 			memoryRequest = float64(container.Resources.Limits.Memory().Value()) / 1024.0 / 1024.0 / 1024.0
+		} else {
+			if _, ok = container.Resources.Requests[v1.ResourceMemory]; ok {
+				memoryRequest = float64(container.Resources.Requests.Memory().Value()) / 1024.0 / 1024.0 / 1024.0
+			}
 		}
 		c.Memory = memoryRequest
 
