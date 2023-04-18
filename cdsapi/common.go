@@ -60,7 +60,8 @@ func dnsDeal() {
 	dns := "nameserver 8.8.8.8"
 	oversea := os.Getenv("CDS_OVERSEA")
 	if oversea != "True" {
-		dns = "nameserver 114.114.114.114"
+		return
+		// dns = "nameserver 114.114.114.114"
 	}
 	_, err := Run("sh", "-c", "cp /etc/resolv.conf /etc/resolv.conf.bak")
 	if err != nil {
