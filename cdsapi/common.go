@@ -41,7 +41,7 @@ func init() {
 		AccessKeySecret = os.Getenv(accessKeySecretLiteral)
 	}
 
-	dnsDeal()
+	// dnsDeal()
 	if preIp := os.Getenv("PRE_IP"); preIp != "" {
 		_, _ = Run("sh", "-c", fmt.Sprintf("echo '%s  cdsapi-gateway.gic.pre' >> /etc/hosts", preIp))
 	}
@@ -49,8 +49,6 @@ func init() {
 	if devIp := os.Getenv("DEV_IP"); devIp != "" {
 		_, _ = Run("sh", "-c", fmt.Sprintf("echo '%s  gateway.gic.test' >> /etc/hosts", devIp))
 	}
-
-	dnsDeal()
 
 	APIHost = os.Getenv("OPENAPI_HOST")
 
