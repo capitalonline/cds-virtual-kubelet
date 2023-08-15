@@ -26,7 +26,7 @@ type ECIProvider struct {
 	cpu                string
 	memory             string
 	maxPods            string
-	pods               map[string]bool
+	createdPod         *sync.Map
 	internalIP         string
 	daemonEndpointPort int32
 }
@@ -48,7 +48,7 @@ func NewECIProvider(rm *manager.ResourceManager, nodeName, operatingSystem strin
 	var err error
 
 	p.resourceManager = rm
-	p.pods = make(map[string]bool)
+	p.createdPod = new(sync.Map)
 
 	p.cpu = "50000"
 	p.memory = "4Ti"
@@ -70,6 +70,11 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	if pod.Status.Reason == "ProviderFailed" {
 		return fmt.Errorf("%s", pod.Status.Message)
 	}
+	log.G(ctx).WithField("CDS", "CreatePod").Debug(fmt.Sprintf("now created pod sum %v", getSyncMapLength(p.createdPod)))
+
+	if getSyncMapLength(p.createdPod) > 400 {
+		return fmt.Errorf("create fail")
+	}
 	var (
 		ownerMap = make(map[string]string)
 		// simContainers []map[string]string
@@ -78,9 +83,6 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		ownerMap["kind"] = pod.OwnerReferences[0].Kind
 		ownerMap["name"] = pod.OwnerReferences[0].Name
 	}
-	log.G(ctx).WithField("CDS", "CreatePod").Debug(fmt.Sprintf("create pod: %v, %v, %v, %v",
-		pod.Namespace, pod.Name, pod.Status.Phase, pod.Status.Reason))
-
 	request := CreateContainerGroup{}
 	request.RestartPolicy = string(pod.Spec.RestartPolicy)
 
@@ -126,19 +128,22 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	request.Cpu, request.Memory = cpu+icpu, mem+imem
 	request.StorageType, request.StorageSize = makeStorageType(pod)
 
+	log.G(ctx).WithField("CDS", "CreatePod").Debug(fmt.Sprintf("create pod: %v, %v, %v, %v",
+		pod.Namespace, pod.Name, pod.Status.Phase, pod.Status.Reason))
+
 	cckRequest, _ := cdsapi.NewCCKRequest(ctx, CreateContainerGroupAction, http.MethodPost, nil, request)
 	response, err := cdsapi.DoOpenApiRequest(ctx, cckRequest, 0)
 	if err != nil {
 		log.G(ctx).WithField("Action", CreateContainerGroupAction).Error(err)
 		return err
 	}
-	code, err := cdsapi.CdsRespDeal(ctx, response, CreateContainerGroupAction, nil)
+	_, err = cdsapi.CdsRespDeal(ctx, response, CreateContainerGroupAction, nil)
 	if err != nil {
 		log.G(ctx).WithField("CDS", "CreatePod").Error(fmt.Sprintf("%s-%s: %v", pod.Namespace, pod.Name, err))
-		if code < 500 {
-			return err
-		}
+
+		return err
 	}
+	p.createdPod.Store(pod.Namespace+"-"+pod.Name, "creating")
 	return nil
 }
 
@@ -147,10 +152,9 @@ func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 	log.G(ctx).WithField("CDS", "UpdatePod").Debug(
 		fmt.Sprintf("update pod: %v, %v, %v, %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
 	if pod.Status.Phase == v1.PodRunning {
-		p.Lock()
-		p.pods[pod.Namespace+"-"+pod.Name] = true
-		p.Unlock()
+		p.createdPod.Store(pod.Namespace+"-"+pod.Name, "running")
 	}
+	log.G(ctx).WithField("CDS", "UpdatePod").Debug(fmt.Sprintf("now created sum %v", getSyncMapLength(p.createdPod)))
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
@@ -195,9 +199,7 @@ func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	if pod.Annotations != nil {
 		eciId = pod.Annotations["eci-instance-id"]
 	}
-	p.Lock()
-	delete(p.pods, pod.Namespace+"-"+pod.Name)
-	p.Unlock()
+	p.createdPod.Delete(pod.Namespace + "-" + pod.Name)
 	if eciId == "" {
 		cgs, code, err := p.GetCgs(ctx, pod.Namespace, pod.Name)
 		if err != nil || code >= 400 {
@@ -282,13 +284,16 @@ func (p *ECIProvider) GetPodStatus(ctx context.Context, namespace, name string) 
 	pod, err := p.GetPodByCondition(ctx, "Provider-GetPodStatus", namespace, name)
 	if err != nil || pod == nil {
 		log.G(ctx).WithField("CDS", "GetPodStatus").Error(fmt.Sprintf("%s-%s status err: %s", namespace, name, err))
-		p.RLock()
-		stat := p.pods[namespace+"-"+name]
-		p.RUnlock()
-		if stat {
-			return nil, fmt.Errorf("err:%v, pod: %v", err, pod)
+
+		data, ok := p.createdPod.Load(namespace + "-" + name)
+		if ok {
+			if data.(string) == "running" {
+				return nil, fmt.Errorf("err:%v, pod: %v", err, pod)
+			} else {
+				return &p.temporaryPod(name, fmt.Sprintf("%v", err)).Status, nil
+			}
 		} else {
-			return &p.temporaryPod(name, fmt.Sprintf("%v", err)).Status, nil
+			return nil, fmt.Errorf("err:%v, pod: %v", err, pod)
 		}
 
 	}

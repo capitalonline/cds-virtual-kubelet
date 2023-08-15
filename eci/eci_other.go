@@ -14,7 +14,7 @@ import (
 )
 
 func (p *ECIProvider) GetPodByCondition(ctx context.Context, source, namespace, name string) (*v1.Pod, error) {
-	log.G(ctx).WithField("CDS", "GetPodByCondition").Warn(source+": get cds eci: ", name+"-"+namespace)
+	log.G(ctx).WithField("CDS", "GetPodByCondition").Debug(source+": get cds eci: ", name+"-"+namespace)
 	cgs, code, err := p.GetCgs(ctx, namespace, name)
 	if err != nil {
 		return nil, err
@@ -29,7 +29,10 @@ func (p *ECIProvider) GetPodByCondition(ctx context.Context, source, namespace, 
 			log.G(ctx).WithField("CDS", "GetPodByCondition").Warn(source+": get pod is non-uniqueness: ", name+" "+namespace)
 			return nil, nil
 		} else {
-			log.G(ctx).WithField("CDS", "GetPodByCondition").Debug(source+": get pod is null ", name+" "+namespace)
+			_, ok := p.createdPod.Load(namespace + "-" + name)
+			if ok {
+				log.G(ctx).WithField("CDS", "GetPodByCondition").Error(source+": pod is created, but not query by cck: ", name+" "+namespace)
+			}
 			return nil, nil
 		}
 	}

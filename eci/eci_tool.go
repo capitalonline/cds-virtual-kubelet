@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -263,4 +264,13 @@ func readDockerConfigJSONSecret(secret *v1.Secret, ips []ImageRegistryCredential
 	}
 
 	return ips, err
+}
+
+func getSyncMapLength(m *sync.Map) int {
+	length := 0
+	m.Range(func(_, _ interface{}) bool {
+		length++
+		return true
+	})
+	return length
 }
