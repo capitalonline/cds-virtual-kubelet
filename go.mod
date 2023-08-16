@@ -1,6 +1,6 @@
 module github.com/capitalonline/cds-virtual-kubelet
 
-go 1.21.0
+go 1.19
 
 require (
 	contrib.go.opencensus.io/exporter/jaeger v0.2.0

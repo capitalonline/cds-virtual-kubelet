@@ -17,6 +17,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"golang.org/x/time/rate"
 	"reflect"
 	"strconv"
 	"sync"
@@ -155,10 +156,10 @@ func NewPodController(cfg PodControllerConfig) (*PodController, error) {
 // Run will set up the event handlers for types we are interested in, as well as syncing informer caches and starting workers.
 // It will block until the context is cancelled, at which point it will shutdown the work queue and wait for workers to finish processing their current work items.
 func (pc *PodController) Run(ctx context.Context, podSyncWorkers int) error {
-	k8sQ := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "syncPodsFromKubernetes")
+	k8sQ := workqueue.NewNamedRateLimitingQueue(SelfControllerRateLimiter(), "syncPodsFromKubernetes")
 	defer k8sQ.ShutDown()
 
-	podStatusQueue := workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "syncPodStatusFromProvider")
+	podStatusQueue := workqueue.NewNamedRateLimitingQueue(SelfControllerRateLimiter(), "syncPodStatusFromProvider")
 	pc.runProviderSyncWorkers(ctx, podStatusQueue, podSyncWorkers)
 	pc.runSyncFromProvider(ctx, podStatusQueue)
 	defer podStatusQueue.ShutDown()
@@ -409,4 +410,12 @@ func loggablePodName(pod *corev1.Pod) string {
 // loggablePodNameFromCoordinates returns the "namespace/name" key for the pod identified by the specified namespace and name (coordinates).
 func loggablePodNameFromCoordinates(namespace, name string) string {
 	return fmt.Sprintf("%s/%s", namespace, name)
+}
+
+func SelfControllerRateLimiter() workqueue.RateLimiter {
+	return workqueue.NewMaxOfRateLimiter(
+		workqueue.NewItemExponentialFailureRateLimiter(1*time.Second, 1000*time.Second),
+		// 10 qps, 100 bucket size.  This is only for retry speed and its only the overall factor (not per item)
+		&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(10), 100)},
+	)
 }
