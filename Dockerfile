@@ -9,7 +9,7 @@ RUN go env
 ARG bin_file
 
 WORKDIR /app
-RUN go mod tidy
+#RUN go mod tidy
 RUN CGO_ENABLED=0 GOARCH="amd64" GOOS="linux" go build -ldflags " -s -w" -o bin/${bin_file}  ./cmd/${bin_file}.go
 
 
