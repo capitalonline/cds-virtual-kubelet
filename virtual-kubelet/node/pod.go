@@ -16,6 +16,7 @@ package node
 
 import (
 	"context"
+	"fmt"
 	"hash/fnv"
 	"time"
 
@@ -251,10 +252,49 @@ func (pc *PodController) updatePodStatus(ctx context.Context, pod *corev1.Pod) e
 		}
 	}
 
-	if _, err := pc.client.Pods(pod.Namespace).UpdateStatus(pod); err != nil {
-		span.SetStatus(err)
-		return pkgerrors.Wrap(err, "error while updating pod status in kubernetes")
+	var DefaultRetry = wait.Backoff{
+		Steps:    5,
+		Duration: 1 * time.Second,
+		Factor:   0,
+		Jitter:   0,
 	}
+
+	updateFunc := func() error {
+		newPod, err := pc.podsLister.Pods(pod.Namespace).Get(pod.Name)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				log.G(ctx).WithError(err).Debug("Skipping pod status update for pod missing in Kubernetes")
+				return nil
+			}
+			return pkgerrors.Wrap(err, "error looking up pod")
+		}
+
+		if shouldSkipPodStatusUpdate(newPod) {
+			return nil
+		}
+
+		if status.Phase == newPod.Status.Phase {
+			return nil
+		}
+
+		newPod.Status = pod.Status
+
+		if _, err := pc.client.Pods(pod.Namespace).UpdateStatus(newPod); err != nil {
+			span.SetStatus(err)
+			return pkgerrors.Wrap(err, "error while updating pod status in kubernetes")
+		}
+
+		return nil
+	}
+
+	if err := retry.RetryOnConflict(DefaultRetry, updateFunc); err != nil {
+		return fmt.Errorf("failed tp update %s/%s pod: %+v", pod.Namespace, pod.Name, err)
+	}
+
+	//if _, err := pc.client.Pods(pod.Namespace).UpdateStatus(pod); err != nil {
+	//	span.SetStatus(err)
+	//	return pkgerrors.Wrap(err, "error while updating pod status in kubernetes")
+	//}
 
 	log.G(ctx).WithFields(log.Fields{
 		"new phase":  string(pod.Status.Phase),
