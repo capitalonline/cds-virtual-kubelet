@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
-	"k8s.io/klog"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -217,7 +216,6 @@ func shouldSkipPodStatusUpdate(pod *corev1.Pod) bool {
 }
 
 func (pc *PodController) updatePodStatus(ctx context.Context, pod *corev1.Pod) error {
-	klog.Infof("xxxxxxxxxxxxxxx %s/%s", pod.Namespace, pod.Name)
 	if shouldSkipPodStatusUpdate(pod) {
 		return nil
 	}
@@ -274,12 +272,9 @@ func (pc *PodController) updatePodStatus(ctx context.Context, pod *corev1.Pod) e
 			return pkgerrors.Wrap(err, "error looking up pod")
 		}
 
-		if shouldSkipPodStatusUpdate(newPod) {
-			return nil
-		}
-
+		log.G(ctx).Debug("111pod status: %s, new pod status: %s, skip this", pod.Status.Phase, newPod.Status.Phase)
 		if pod.Status.Phase == newPod.Status.Phase {
-			log.G(ctx).Debug("pod status: %s, new pod status: %s, skip this", pod.Status.Phase, newPod.Status.Phase)
+			log.G(ctx).Debug("222pod status: %s, new pod status: %s, skip this", pod.Status.Phase, newPod.Status.Phase)
 			return nil
 		}
 
