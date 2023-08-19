@@ -121,7 +121,7 @@ func (pc *PodController) processPodStatusUpdate(ctx context.Context, workerID st
 // Providers should implement async update support, even if it just means copying
 // something like this in.
 func (pc *PodController) providerSyncLoop(ctx context.Context, q workqueue.RateLimitingInterface) {
-	const sleepTime = 5 * time.Second
+	const sleepTime = 10 * time.Second
 
 	t := time.NewTimer(sleepTime)
 	defer t.Stop()
