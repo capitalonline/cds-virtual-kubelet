@@ -273,9 +273,7 @@ func (pc *PodController) updatePodStatus(ctx context.Context, pod *corev1.Pod) e
 			return pkgerrors.Wrap(err, "error looking up pod")
 		}
 
-		log.G(ctx).Debug("111pod status: %s, new pod status: %s, skip this", string(pod.Status.Phase), string(newPod.Status.Phase))
 		if status != nil && (string(status.Phase) == string(newPod.Status.Phase)) {
-			log.G(ctx).Debug("222pod status: %s, new pod status: %s, skip this", string(pod.Status.Phase), string(newPod.Status.Phase))
 			return nil
 		}
 
