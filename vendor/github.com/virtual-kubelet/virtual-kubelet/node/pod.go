@@ -282,7 +282,7 @@ func (pc *PodController) updatePodStatus(ctx context.Context, pod *corev1.Pod) e
 		if status != nil {
 			newPod.Status = *status
 		} else {
-			newPod = pod
+			newPod.Status = pod.Status
 		}
 
 		if _, err := pc.client.Pods(pod.Namespace).UpdateStatus(newPod); err != nil {
