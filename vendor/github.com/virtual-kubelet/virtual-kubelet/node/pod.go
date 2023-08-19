@@ -211,6 +211,7 @@ func (pc *PodController) updatePodStatuses(ctx context.Context, q workqueue.Rate
 
 func shouldSkipPodStatusUpdate(pod *corev1.Pod) bool {
 	return pod.Status.Phase == corev1.PodSucceeded ||
+		pod.Status.Phase == corev1.PodRunning ||
 		pod.Status.Phase == corev1.PodFailed ||
 		pod.Status.Reason == podStatusReasonProviderFailed
 }
