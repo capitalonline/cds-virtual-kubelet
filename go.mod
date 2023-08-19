@@ -1,6 +1,6 @@
 module github.com/capitalonline/cds-virtual-kubelet
 
-go 1.19
+go 1.19.0
 
 require (
 	contrib.go.opencensus.io/exporter/jaeger v0.2.0
@@ -23,19 +23,19 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
 	github.com/elazarl/goproxy v0.0.0-20190421051319-9d40249d3c2f // indirect
-	github.com/gogo/protobuf v0.0.0-20171007142547-342cbe0a0415 // indirect
+	github.com/gogo/protobuf v1.0.0 // indirect
 	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
 	github.com/golang/protobuf v1.3.1 // indirect
 	github.com/google/go-cmp v0.5.7 // indirect
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf // indirect
-	github.com/googleapis/gnostic v0.0.0-20170729233727-0c5108395e2d // indirect
+	github.com/googleapis/gnostic v0.1.0 // indirect
 	github.com/gorilla/mux v1.7.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.8.5 // indirect
 	github.com/hashicorp/golang-lru v0.5.0 // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.5 // indirect
-	github.com/konsorten/go-windows-terminal-sequences v1.0.1 // indirect
+	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/onsi/ginkgo v1.8.0 // indirect
@@ -70,3 +70,5 @@ replace k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190612205821-1799e75
 replace k8s.io/client-go => k8s.io/client-go v0.0.0-20190805141520-2fe0317bcee0
 
 replace k8s.io/kubernetes => k8s.io/kubernetes v1.14.3
+
+replace github.com/virtual-kubelet/virtual-kubelet => ./virtual-kubelet
