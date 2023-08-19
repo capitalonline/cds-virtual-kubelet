@@ -156,7 +156,7 @@ func NewPodController(cfg PodControllerConfig) (*PodController, error) {
 func defaultControllerRateLimiter() workqueue.RateLimiter {
 	return workqueue.NewMaxOfRateLimiter(
 		workqueue.NewItemExponentialFailureRateLimiter(500*time.Millisecond, 1000*time.Second),
-		&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(10000), 10000)},
+		&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(1000), 1000)},
 	)
 }
 
