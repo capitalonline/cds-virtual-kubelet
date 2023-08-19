@@ -232,7 +232,7 @@ func (pc *PodController) updatePodStatus(ctx context.Context, pod *corev1.Pod) e
 
 	// Update the pod's status
 	if status != nil {
-		pod.Status = *status
+		//pod.Status = *status
 	} else {
 		// Only change the status when the pod was already up
 		// Only doing so when the pod was successfully running makes sure we don't run into race conditions during pod creation.
@@ -273,13 +273,16 @@ func (pc *PodController) updatePodStatus(ctx context.Context, pod *corev1.Pod) e
 		}
 
 		log.G(ctx).Debug("111pod status: %s, new pod status: %s, skip this", string(pod.Status.Phase), string(newPod.Status.Phase))
-		if string(status.Phase) == string(newPod.Status.Phase) {
+		if status != nil && (string(status.Phase) == string(newPod.Status.Phase)) {
 			log.G(ctx).Debug("222pod status: %s, new pod status: %s, skip this", string(pod.Status.Phase), string(newPod.Status.Phase))
 			return nil
 		}
 
-		newPod.Status = *status
-		log.G(ctx).Debug("update new pod status: %+v", newPod.Status)
+		if status != nil {
+			newPod.Status = *status
+		} else {
+			newPod = pod
+		}
 
 		if _, err := pc.client.Pods(pod.Namespace).UpdateStatus(newPod); err != nil {
 			span.SetStatus(err)
