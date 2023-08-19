@@ -105,7 +105,7 @@ func containerGroupToPod(cg *ContainerGroup) (*v1.Pod, error) {
 func eciStateToPodPhase(state string) v1.PodPhase {
 	switch state {
 	case "Scheduling":
-		return v1.PodPending
+		return v1.PodPhase("Scheduling")
 	case "ScheduleFailed":
 		return v1.PodFailed
 	case "Pending":
