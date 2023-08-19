@@ -48,7 +48,7 @@ func NewECIProvider(rm *manager.ResourceManager, nodeName, operatingSystem strin
 
 	p.resourceManager = rm
 
-	p.cpu = "500000000000"
+	p.cpu = "5000000"
 	p.memory = "400Ti"
 	p.maxPods = MaxPods
 
