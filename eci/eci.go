@@ -26,7 +26,6 @@ type ECIProvider struct {
 	cpu                string
 	memory             string
 	maxPods            string
-	createdPod         *sync.Map
 	internalIP         string
 	daemonEndpointPort int32
 }
@@ -48,10 +47,9 @@ func NewECIProvider(rm *manager.ResourceManager, nodeName, operatingSystem strin
 	var err error
 
 	p.resourceManager = rm
-	p.createdPod = new(sync.Map)
 
-	p.cpu = "50000"
-	p.memory = "4Ti"
+	p.cpu = "5000000"
+	p.memory = "400Ti"
 	p.maxPods = MaxPods
 
 	p.operatingSystem = operatingSystem
@@ -70,11 +68,7 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 	if pod.Status.Reason == "ProviderFailed" {
 		return fmt.Errorf("%s", pod.Status.Message)
 	}
-	log.G(ctx).WithField("CDS", "CreatePod").Debug(fmt.Sprintf("now created pod sum %v", getSyncMapLength(p.createdPod)))
 
-	if getSyncMapLength(p.createdPod) > 400 {
-		return fmt.Errorf("create fail")
-	}
 	var (
 		ownerMap = make(map[string]string)
 		// simContainers []map[string]string
@@ -143,7 +137,7 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 
 		return err
 	}
-	p.createdPod.Store(pod.Namespace+"-"+pod.Name, "creating")
+
 	return nil
 }
 
@@ -151,10 +145,7 @@ func (p *ECIProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 func (p *ECIProvider) UpdatePod(ctx context.Context, pod *v1.Pod) error {
 	log.G(ctx).WithField("CDS", "UpdatePod").Debug(
 		fmt.Sprintf("update pod: %v, %v, %v, %v", pod.Name, pod.Namespace, pod.Status.Phase, pod.Status.Reason))
-	if pod.Status.Phase == v1.PodRunning {
-		p.createdPod.Store(pod.Namespace+"-"+pod.Name, "running")
-	}
-	log.G(ctx).WithField("CDS", "UpdatePod").Debug(fmt.Sprintf("now created sum %v", getSyncMapLength(p.createdPod)))
+
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
@@ -199,7 +190,6 @@ func (p *ECIProvider) DeletePod(ctx context.Context, pod *v1.Pod) error {
 	if pod.Annotations != nil {
 		eciId = pod.Annotations["eci-instance-id"]
 	}
-	p.createdPod.Delete(pod.Namespace + "-" + pod.Name)
 	if eciId == "" {
 		cgs, code, err := p.GetCgs(ctx, pod.Namespace, pod.Name)
 		if err != nil || code >= 400 {
@@ -284,17 +274,7 @@ func (p *ECIProvider) GetPodStatus(ctx context.Context, namespace, name string) 
 	pod, err := p.GetPodByCondition(ctx, "Provider-GetPodStatus", namespace, name)
 	if err != nil || pod == nil {
 		log.G(ctx).WithField("CDS", "GetPodStatus").Error(fmt.Sprintf("%s-%s status err: %s", namespace, name, err))
-
-		data, ok := p.createdPod.Load(namespace + "-" + name)
-		if ok {
-			if data.(string) == "running" {
-				return nil, fmt.Errorf("err:%v, pod: %v", err, pod)
-			} else {
-				return &p.temporaryPod(name, fmt.Sprintf("%v", err)).Status, nil
-			}
-		} else {
-			return nil, fmt.Errorf("err:%v, pod: %v", err, pod)
-		}
+		return nil, fmt.Errorf("err:%v, pod: %v", err, pod)
 
 	}
 	return &pod.Status, nil
