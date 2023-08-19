@@ -88,6 +88,7 @@ type NodeControllerOpt func(*NodeController) error // nolint: golint
 //     the node status is updated at every ping interval.
 //   - When node leases are enabled, node status updates are controlled by the
 //     node status update interval option.
+//
 // To set a custom node status update interval, see WithNodeStatusUpdateInterval().
 func WithNodeEnableLeaseV1Beta1(client v1beta1.LeaseInterface, baseLease *coord.Lease) NodeControllerOpt {
 	return func(n *NodeController) error {
@@ -467,6 +468,26 @@ func UpdateNodeStatus(ctx context.Context, nodes v1.NodeInterface, n *corev1.Nod
 	node.Status = n.Status
 
 	ctx = addNodeAttributes(ctx, span, node)
+
+	// update node status
+	for i := range n.Status.Conditions {
+		condition := node.Status.Conditions[i]
+
+		switch condition.Type {
+		case corev1.NodeDiskPressure:
+			node.Status.Conditions[i].Reason = "KubeletHasNoDiskPressure"
+			node.Status.Conditions[i].Status = "False"
+		case corev1.NodeMemoryPressure:
+			node.Status.Conditions[i].Reason = "KubeletHasSufficientMemory"
+			node.Status.Conditions[i].Status = "False"
+		case corev1.NodeReady:
+			node.Status.Conditions[i].Reason = "KubeletReady"
+			node.Status.Conditions[i].Status = "True"
+		case corev1.NodePIDPressure:
+			node.Status.Conditions[i].Reason = "KubeletHasSufficientPID"
+			node.Status.Conditions[i].Status = "True"
+		}
+	}
 
 	// Patch the node status to merge other changes on the node.
 	updated, _, err := PatchNodeStatus(nodes, types.NodeName(n.Name), oldNode, node)
