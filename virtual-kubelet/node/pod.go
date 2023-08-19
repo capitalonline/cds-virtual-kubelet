@@ -276,11 +276,13 @@ func (pc *PodController) updatePodStatus(ctx context.Context, pod *corev1.Pod) e
 			return nil
 		}
 
-		if status.Phase == newPod.Status.Phase {
+		if pod.Status.Phase == newPod.Status.Phase {
+			log.G(ctx).Debug("pod status: %s, new pod status: %s, skip this", pod.Status.Phase, newPod.Status.Phase)
 			return nil
 		}
 
-		newPod.Status = pod.Status
+		newPod.Status = *status
+		log.G(ctx).Debug("update new pod status: %+v", newPod.Status)
 
 		if _, err := pc.client.Pods(pod.Namespace).UpdateStatus(newPod); err != nil {
 			span.SetStatus(err)
